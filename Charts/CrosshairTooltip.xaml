@@ -1,0 +1,27 @@
+<UserControl x:Class="Charts.CrosshairTooltip"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+             mc:Ignorable="d" 
+             d:DesignHeight="150" d:DesignWidth="200">
+    <Border x:Name="RootBorder" Background="#B21E1E1E" BorderBrush="White" BorderThickness="1" CornerRadius="3" Padding="10,4,10,4">
+        <!-- OHLC Display -->
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition/>
+                <RowDefinition/>
+                <RowDefinition/>
+            </Grid.RowDefinitions>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition/>
+                <ColumnDefinition/>
+            </Grid.ColumnDefinitions>
+
+            <TextBlock x:Name="HighText" Grid.Row="0" Grid.ColumnSpan="2" Foreground="White" TextAlignment="Center" FontSize="{DynamicResource ChartFontSizeLg}" VerticalAlignment="Center" />
+            <TextBlock x:Name="OpenText" Grid.Row="1" Grid.Column="0" Foreground="White" TextAlignment="Left" FontSize="{DynamicResource ChartFontSizeLg}" VerticalAlignment="Center" Margin="0,0,6,0" />
+            <TextBlock x:Name="CloseText" Grid.Row="1" Grid.Column="1" Foreground="White" TextAlignment="Right" FontSize="{DynamicResource ChartFontSizeLg}" VerticalAlignment="Center" Margin="6,0,0,0" />
+            <TextBlock x:Name="LowText" Grid.Row="2" Grid.ColumnSpan="2" Foreground="White" TextAlignment="Center" FontSize="{DynamicResource ChartFontSizeLg}" VerticalAlignment="Center" />
+        </Grid>
+    </Border>
+</UserControl>

@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0">
+  <assemblyIdentity version="1.0.0.0" name="ZenPlatform.app" />
+  <file name="ConcordsCAPIATL.dll" hashalg="SHA1">
+    <comClass clsid="{FCE997AF-6846-4511-B8F7-27E352787165}" tlbid="{F728BD1F-9385-476B-B911-CD3D16779212}" description="ConcordsCAPI Class" />
+    <typelib tlbid="{F728BD1F-9385-476B-B911-CD3D16779212}" resourceid="1" version="1.0" helpdir="" flags="HASDISKIMAGE" />
+  </file>
+  <comInterfaceExternalProxyStub name="IConcordsCAPI" iid="{659EB0EF-59D6-445C-AD54-AA0B43D3D4B6}" tlbid="{F728BD1F-9385-476B-B911-CD3D16779212}" proxyStubClsid32="{00020424-0000-0000-C000-000000000046}" />
+  <trustInfo xmlns="urn:schemas-microsoft-com:asm.v2">
+    <security>
+      <requestedPrivileges xmlns="urn:schemas-microsoft-com:asm.v3">
+        <requestedExecutionLevel level="requireAdministrator" uiAccess="false" />
+      </requestedPrivileges>
+    </security>
+  </trustInfo>
+</assembly>

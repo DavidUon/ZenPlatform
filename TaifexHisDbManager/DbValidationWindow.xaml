@@ -1,0 +1,358 @@
+<Window x:Class="TaifexHisDbManager.DbValidationWindow"
+        x:ClassModifier="internal"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="歷史資料驗證" MinWidth="1261" MinHeight="446" SizeToContent="WidthAndHeight"
+        WindowStartupLocation="CenterOwner"
+        Background="#1E1E1E" Foreground="#E6E6E6"
+        ShowInTaskbar="False">
+    <Window.Resources>
+        <SolidColorBrush x:Key="InputBackgroundBrush" Color="#FF1F1F1F" />
+        <SolidColorBrush x:Key="InputBorderBrush" Color="#FF2D6CDF" />
+        <SolidColorBrush x:Key="InputTextBrush" Color="#FFE6E6E6" />
+
+        <Style x:Key="InputTextBoxStyle" TargetType="{x:Type TextBox}">
+            <Setter Property="Background" Value="{StaticResource InputBackgroundBrush}" />
+            <Setter Property="Foreground" Value="{StaticResource InputTextBrush}" />
+            <Setter Property="BorderBrush" Value="{StaticResource InputBorderBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Padding" Value="6,2" />
+            <Setter Property="Height" Value="28" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+        </Style>
+
+        <Style x:Key="DarkComboBoxToggleButtonStyle" TargetType="ToggleButton">
+            <Setter Property="Background" Value="{StaticResource InputBackgroundBrush}" />
+            <Setter Property="BorderBrush" Value="{StaticResource InputBorderBrush}" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ToggleButton">
+                        <Border x:Name="Border"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="24" />
+                                </Grid.ColumnDefinitions>
+                                <ContentPresenter Grid.Column="0"
+                                                  Margin="6,2,4,2"
+                                                  VerticalAlignment="Center"
+                                                  HorizontalAlignment="Center"
+                                                  RecognizesAccessKey="True" />
+                                <Border x:Name="ArrowHost"
+                                        Grid.Column="1"
+                                        Background="{TemplateBinding Background}">
+                                    <Path Data="M 0 0 L 4 4 L 8 0 Z"
+                                          Fill="{StaticResource InputTextBrush}"
+                                          HorizontalAlignment="Center"
+                                          VerticalAlignment="Center" />
+                                </Border>
+                            </Grid>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="ArrowHost" Property="Background" Value="#FF787878" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.6" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="DarkComboBoxStyle" TargetType="ComboBox">
+            <Style.Resources>
+                <SolidColorBrush x:Key="{x:Static SystemColors.ControlBrushKey}" Color="#FF1F1F1F" />
+                <SolidColorBrush x:Key="{x:Static SystemColors.ControlTextBrushKey}" Color="#FFE6E6E6" />
+                <SolidColorBrush x:Key="{x:Static SystemColors.WindowBrushKey}" Color="#FF1F1F1F" />
+                <SolidColorBrush x:Key="{x:Static SystemColors.WindowTextBrushKey}" Color="#FFE6E6E6" />
+                <SolidColorBrush x:Key="{x:Static SystemColors.HighlightBrushKey}" Color="#FF2D6CDF" />
+                <SolidColorBrush x:Key="{x:Static SystemColors.HighlightTextBrushKey}" Color="#FFE6E6E6" />
+            </Style.Resources>
+            <Setter Property="Foreground" Value="{StaticResource InputTextBrush}" />
+            <Setter Property="Background" Value="{StaticResource InputBackgroundBrush}" />
+            <Setter Property="BorderBrush" Value="{StaticResource InputBorderBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="SnapsToDevicePixels" Value="True" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ComboBox">
+                        <Grid>
+                            <ToggleButton x:Name="ToggleButton"
+                                          Style="{StaticResource DarkComboBoxToggleButtonStyle}"
+                                          IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}"
+                                          Focusable="False"
+                                          Background="{TemplateBinding Background}"
+                                          BorderBrush="{TemplateBinding BorderBrush}"
+                                          BorderThickness="{TemplateBinding BorderThickness}" />
+                            <ContentPresenter x:Name="ContentSite"
+                                              IsHitTestVisible="False"
+                                              Margin="6,2,28,2"
+                                              VerticalAlignment="Center"
+                                              HorizontalAlignment="Center"
+                                              Content="{TemplateBinding SelectionBoxItem}"
+                                              ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}"
+                                              ContentTemplateSelector="{TemplateBinding ItemTemplateSelector}" />
+                            <TextBox x:Name="PART_EditableTextBox"
+                                     Visibility="Hidden"
+                                     Background="Transparent"
+                                     Foreground="{TemplateBinding Foreground}"
+                                     BorderThickness="0"
+                                     BorderBrush="Transparent"
+                                     Margin="6,2,28,2"
+                                     VerticalContentAlignment="Center"
+                                     HorizontalContentAlignment="Center"
+                                     Focusable="True" />
+                            <Popup x:Name="PART_Popup"
+                                   Placement="Bottom"
+                                   IsOpen="{TemplateBinding IsDropDownOpen}"
+                                   AllowsTransparency="True"
+                                   Focusable="False"
+                                   PopupAnimation="Fade">
+                                <Border x:Name="DropDownBorder"
+                                        Background="{StaticResource InputBackgroundBrush}"
+                                        BorderBrush="{StaticResource InputBorderBrush}"
+                                        BorderThickness="1"
+                                        MinWidth="{TemplateBinding ActualWidth}">
+                                    <ScrollViewer Margin="0"
+                                                  CanContentScroll="True"
+                                                  HorizontalScrollBarVisibility="Disabled"
+                                                  VerticalScrollBarVisibility="Auto">
+                                        <ItemsPresenter />
+                                    </ScrollViewer>
+                                </Border>
+                            </Popup>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsEditable" Value="True">
+                                <Setter TargetName="PART_EditableTextBox" Property="Visibility" Value="Visible" />
+                                <Setter TargetName="ContentSite" Property="Visibility" Value="Hidden" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.6" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="DarkComboBoxItemStyle" TargetType="ComboBoxItem">
+            <Setter Property="Foreground" Value="{StaticResource InputTextBrush}" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Padding" Value="6,2" />
+            <Style.Triggers>
+                <Trigger Property="IsHighlighted" Value="True">
+                    <Setter Property="Background" Value="{StaticResource InputBorderBrush}" />
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style x:Key="InputComboBoxStyle" TargetType="{x:Type ComboBox}" BasedOn="{StaticResource DarkComboBoxStyle}">
+            <Setter Property="Background" Value="{StaticResource InputBackgroundBrush}" />
+            <Setter Property="Foreground" Value="{StaticResource InputTextBrush}" />
+            <Setter Property="BorderBrush" Value="{StaticResource InputBorderBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Height" Value="28" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+        </Style>
+
+        <Style TargetType="ComboBoxItem" BasedOn="{StaticResource DarkComboBoxItemStyle}" />
+
+        <!-- Keep DatePicker default style to avoid truncation issues -->
+    </Window.Resources>
+    <Grid Margin="12" Background="#1E1E1E">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <Grid Grid.Row="0" Margin="0,0,0,8">
+            <StackPanel x:Name="ImportModePanel" Orientation="Horizontal">
+                <Button Name="ImportOfficialHistoryButton"
+                        Margin="0,0,10,0" HorizontalAlignment="Left"
+                        Click="OnImportOfficialHistory">
+                    <Button.Style>
+                        <Style TargetType="Button">
+                            <Setter Property="Background" Value="#2D2D2D"/>
+                            <Setter Property="Foreground" Value="#E6E6E6"/>
+                            <Setter Property="BorderBrush" Value="#464646"/>
+                            <Setter Property="BorderThickness" Value="1"/>
+                            <Setter Property="Padding" Value="12,4"/>
+                            <Setter Property="FontSize" Value="15"/>
+                            <Setter Property="Template">
+                                <Setter.Value>
+                                    <ControlTemplate TargetType="{x:Type Button}">
+                                        <Border x:Name="Border"
+                                                Background="{TemplateBinding Background}"
+                                                BorderBrush="{TemplateBinding BorderBrush}"
+                                                BorderThickness="{TemplateBinding BorderThickness}">
+                                            <ContentPresenter HorizontalAlignment="Center"
+                                                              VerticalAlignment="Center"
+                                                              Margin="{TemplateBinding Padding}"/>
+                                        </Border>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter TargetName="Border" Property="Background" Value="#646464"/>
+                                            </Trigger>
+                                            <Trigger Property="IsPressed" Value="True">
+                                                <Setter TargetName="Border" Property="Background" Value="#2A2A2A"/>
+                                            </Trigger>
+                                            <Trigger Property="IsEnabled" Value="False">
+                                                <Setter TargetName="Border" Property="Opacity" Value="0.5"/>
+                                            </Trigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </Setter.Value>
+                            </Setter>
+                        </Style>
+                    </Button.Style>
+                    匯入期貨交易所官方歷史資料
+                </Button>
+                <TextBlock VerticalAlignment="Bottom"
+                           Foreground="#FFD700"
+                           FontSize="13"
+                           Text="匯入說明"
+                           Cursor="Hand"
+                           MouseLeftButtonUp="OnImportHelpClick"/>
+            </StackPanel>
+
+            <Grid x:Name="RangeModePanel" Visibility="Collapsed">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <Grid Grid.Row="0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <StackPanel Grid.Column="0" Orientation="Horizontal">
+                        <TextBlock VerticalAlignment="Center" Margin="0,0,8,0" FontSize="15" Text="開始日期"/>
+                        <Border Width="120" Height="28"
+                                Background="{StaticResource InputBackgroundBrush}"
+                                BorderBrush="{StaticResource InputBorderBrush}"
+                                BorderThickness="1"
+                                Padding="6,2">
+                            <TextBlock VerticalAlignment="Center"
+                                       TextAlignment="Center"
+                                       HorizontalAlignment="Center"
+                                       Foreground="{StaticResource InputTextBrush}"
+                                       Text="{Binding ElementName=StartDatePicker, Path=SelectedDate, StringFormat={}{0:yyyy/MM/dd}, TargetNullValue=----/--/--}" />
+                        </Border>
+                        <DatePicker x:Name="StartDatePicker" Visibility="Collapsed" />
+                        <ComboBox x:Name="StartTimeCombo" Margin="8,0,0,0" FontSize="15" MinWidth="80" IsEditable="False" SelectedIndex="1"
+                                  Style="{StaticResource InputComboBoxStyle}">
+                            <ComboBox.Resources>
+                                <Style TargetType="{x:Type TextBox}">
+                                    <Setter Property="Background" Value="{StaticResource InputBackgroundBrush}" />
+                                    <Setter Property="Foreground" Value="{StaticResource InputTextBrush}" />
+                                    <Setter Property="BorderBrush" Value="{StaticResource InputBorderBrush}" />
+                                    <Setter Property="BorderThickness" Value="1" />
+                                    <Setter Property="Padding" Value="6,2" />
+                                </Style>
+                            </ComboBox.Resources>
+                            <ComboBoxItem Content="05:00"/>
+                            <ComboBoxItem Content="08:45"/>
+                            <ComboBoxItem Content="13:45"/>
+                            <ComboBoxItem Content="15:00"/>
+                        </ComboBox>
+                        <TextBlock VerticalAlignment="Center" Margin="16,0,8,0" FontSize="15" Text="結束日期"/>
+                        <Border Width="120" Height="28"
+                                Background="{StaticResource InputBackgroundBrush}"
+                                BorderBrush="{StaticResource InputBorderBrush}"
+                                BorderThickness="1"
+                                Padding="6,2">
+                            <TextBlock VerticalAlignment="Center"
+                                       TextAlignment="Center"
+                                       HorizontalAlignment="Center"
+                                       Foreground="{StaticResource InputTextBrush}"
+                                       Text="{Binding ElementName=EndDatePicker, Path=SelectedDate, StringFormat={}{0:yyyy/MM/dd}, TargetNullValue=----/--/--}" />
+                        </Border>
+                        <DatePicker x:Name="EndDatePicker" Visibility="Collapsed" />
+                        <ComboBox x:Name="EndTimeCombo" Margin="8,0,0,0" FontSize="15" MinWidth="80" IsEditable="False" SelectedIndex="0"
+                                  Style="{StaticResource InputComboBoxStyle}">
+                            <ComboBox.Resources>
+                                <Style TargetType="{x:Type TextBox}">
+                                    <Setter Property="Background" Value="{StaticResource InputBackgroundBrush}" />
+                                    <Setter Property="Foreground" Value="{StaticResource InputTextBrush}" />
+                                    <Setter Property="BorderBrush" Value="{StaticResource InputBorderBrush}" />
+                                    <Setter Property="BorderThickness" Value="1" />
+                                    <Setter Property="Padding" Value="6,2" />
+                                </Style>
+                            </ComboBox.Resources>
+                            <ComboBoxItem Content="05:00"/>
+                            <ComboBoxItem Content="08:45"/>
+                            <ComboBoxItem Content="13:45"/>
+                            <ComboBoxItem Content="15:00"/>
+                        </ComboBox>
+                        <TextBlock VerticalAlignment="Center" Margin="16,0,8,0" FontSize="15" Text="前置指標日期"/>
+                        <TextBox x:Name="PreloadDaysTextBox" FontSize="15" Width="40" Text="1"
+                                 TextAlignment="Center" VerticalContentAlignment="Center"
+                                 Style="{StaticResource InputTextBoxStyle}" />
+                        <TextBlock VerticalAlignment="Center" Margin="6,0,0,0" FontSize="15" Text="天"/>
+                        <TextBlock VerticalAlignment="Center" Margin="16,0,8,0" FontSize="15" Text="回測商品"/>
+                        <ComboBox x:Name="BacktestProductCombo" MinWidth="120" Margin="0,0,8,0"
+                                  SelectedIndex="0"
+                                  Style="{StaticResource InputComboBoxStyle}">
+                            <ComboBoxItem Content="大型台指" Tag="1"/>
+                            <ComboBoxItem Content="小型台指" Tag="2"/>
+                            <ComboBoxItem Content="微型台指" Tag="3"/>
+                        </ComboBox>
+                    </StackPanel>
+
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right">
+                        <TextBlock VerticalAlignment="Center" Margin="0,0,8,0" FontSize="15" Text="回測模式"/>
+                        <RadioButton x:Name="ExactBacktestRadio" GroupName="BacktestMode" IsChecked="True" Margin="0,0,10,0"
+                                     VerticalAlignment="Center" FontSize="15" Content="精確回測"/>
+                        <RadioButton x:Name="FastBacktestRadio" GroupName="BacktestMode"
+                                     VerticalAlignment="Center" FontSize="15" Content="快速回測"/>
+                    </StackPanel>
+                </Grid>
+
+            </Grid>
+        </Grid>
+
+        <TabControl Grid.Row="1" Name="YearTabs" Background="#1E1E1E" Foreground="#E6E6E6"
+                    FontSize="15"/>
+
+        <Grid Grid.Row="2" Margin="0,10,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+
+            <StackPanel Grid.Column="0" Orientation="Horizontal" HorizontalAlignment="Center"
+                        TextElement.FontSize="15">
+                <TextBlock Foreground="#FFFFFF" Margin="0,0,18,0">
+                    <Run Text="■ " Foreground="#646464"/>
+                    <Run Text="無資料"/>
+                </TextBlock>
+                <TextBlock Foreground="#FFFFFF" Margin="0,0,18,0">
+                    <Run Text="■ " Foreground="#00C800"/>
+                    <Run Text="早晚開盤"/>
+                </TextBlock>
+                <TextBlock Foreground="#FFFFFF">
+                    <Run Text="■ " Foreground="#C8C800"/>
+                    <Run Text="僅有凌晨開盤"/>
+                </TextBlock>
+            </StackPanel>
+
+            <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right">
+                <Button x:Name="CancelBacktestButton" Padding="12,4" Margin="0,0,8,0" FontSize="15"
+                        Click="OnCancelBacktest">取消</Button>
+                <Button x:Name="StartBacktestButton" Padding="12,4" FontSize="15" Width="160"
+                        Click="OnStartBacktest">開始回測</Button>
+            </StackPanel>
+        </Grid>
+    </Grid>
+</Window>

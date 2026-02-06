@@ -1,0 +1,21 @@
+<Window x:Class="TaifexHisDbManager.ImportProgressWindow"
+        x:ClassModifier="internal"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="匯入中"
+        Height="160" Width="360"
+        ResizeMode="NoResize"
+        WindowStartupLocation="CenterOwner"
+        Background="#1E1E1E" Foreground="#E6E6E6"
+        ShowInTaskbar="False">
+    <Grid Margin="16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="16"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <TextBlock Grid.Row="0" Text="匯入中，請稍候..." FontSize="14"/>
+        <ProgressBar Grid.Row="2" Height="18" IsIndeterminate="True"/>
+    </Grid>
+</Window>

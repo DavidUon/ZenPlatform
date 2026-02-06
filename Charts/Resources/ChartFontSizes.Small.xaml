@@ -1,0 +1,11 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:sys="clr-namespace:System;assembly=mscorlib">
+  <!-- Compact typography scale for KChartView -->
+  <sys:Double x:Key="ChartFontSizeXs">9</sys:Double>
+  <sys:Double x:Key="ChartFontSizeSm">11</sys:Double>
+  <sys:Double x:Key="ChartFontSizeMd">13</sys:Double>
+  <sys:Double x:Key="ChartFontSizeLg">15</sys:Double>
+  <sys:Double x:Key="ChartFontSizeXl">17</sys:Double>
+  <sys:Double x:Key="ChartFontSizeDisplay">19</sys:Double>
+</ResourceDictionary>

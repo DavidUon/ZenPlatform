@@ -1,0 +1,76 @@
+<Window x:Class="ZenPlatform.RegisterWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="註冊Magistock帳號"
+        WindowStartupLocation="CenterOwner"
+        SizeToContent="WidthAndHeight"
+        Background="{StaticResource BrushWindowBackground}"
+        Foreground="{StaticResource BrushText}">
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <StackPanel Margin="20">
+            <TextBlock Text="註冊Magistock帳號"
+                       FontSize="18"
+                       Foreground="#FFFFFFFF"
+                       Margin="0,0,0,8" />
+            <Border Height="1" Background="{StaticResource BrushSeparator}" Margin="0,0,0,16" />
+
+            <StackPanel Margin="0,0,0,12">
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                    <TextBlock Text="身分證字號" />
+                    <TextBlock Text="(必填)" Foreground="#FFFF5050" Margin="6,0,0,0" />
+                </StackPanel>
+                <TextBox x:Name="IdTextBox" MinWidth="308" />
+            </StackPanel>
+
+            <StackPanel Margin="0,0,0,12">
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                    <TextBlock Text="Email" />
+                    <TextBlock Text="(必填)" Foreground="#FFFF5050" Margin="6,0,0,0" />
+                </StackPanel>
+                <TextBox x:Name="EmailTextBox" MinWidth="308" />
+            </StackPanel>
+
+            <StackPanel Margin="0,0,0,12">
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                    <TextBlock Text="密碼" />
+                    <TextBlock Text="(必填)" Foreground="#FFFF5050" Margin="6,0,0,0" />
+                </StackPanel>
+                <PasswordBox x:Name="PasswordBox" MinWidth="308" />
+                <TextBlock Text="密碼非期貨交易密碼" Foreground="{StaticResource BrushMutedText}" Margin="0,4,0,0" />
+            </StackPanel>
+
+            <StackPanel Margin="0,0,0,12">
+                <TextBlock Text="重複密碼" Margin="0,0,0,4" />
+                <PasswordBox x:Name="ConfirmPasswordBox" MinWidth="308" />
+            </StackPanel>
+
+            <StackPanel Margin="0,0,0,12">
+                <TextBlock Text="驗證碼" Margin="0,0,0,4" />
+                <StackPanel Orientation="Horizontal">
+                    <TextBox x:Name="VerificationCodeTextBox" MinWidth="176" />
+                    <Button Content="發送驗證信" Margin="10,0,0,0" Click="OnSendVerificationClick" />
+                </StackPanel>
+            </StackPanel>
+
+            <StackPanel Margin="0,0,0,12">
+                <TextBlock Text="姓名" Margin="0,0,0,4" />
+                <TextBox x:Name="NameTextBox" MinWidth="308" />
+            </StackPanel>
+
+            <StackPanel Margin="0,0,0,12">
+                <TextBlock Text="電話" Margin="0,0,0,4" />
+                <TextBox x:Name="PhoneTextBox" MinWidth="308" />
+            </StackPanel>
+
+            <StackPanel Margin="0,0,0,20">
+                <TextBlock Text="Line ID (接收交易簡訊用)" Margin="0,0,0,4" />
+                <TextBox x:Name="LineIdTextBox" MinWidth="308" />
+            </StackPanel>
+
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                <Button Content="取消" Margin="0,0,12,0" Click="OnCancelClick" />
+                <Button Content="註冊" Click="OnRegisterClick" />
+            </StackPanel>
+        </StackPanel>
+    </ScrollViewer>
+</Window>

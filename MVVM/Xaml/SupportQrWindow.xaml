@@ -1,0 +1,27 @@
+<Window x:Class="ZenPlatform.SupportQrWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="聯絡客服"
+        WindowStartupLocation="CenterOwner"
+        SizeToContent="WidthAndHeight"
+        Background="{StaticResource BrushWindowBackground}"
+        Foreground="{StaticResource BrushText}">
+    <StackPanel Margin="20" HorizontalAlignment="Center">
+        <Border BorderBrush="{StaticResource BrushBorder}"
+                BorderThickness="1"
+                Background="{StaticResource BrushWindowBackground}"
+                Padding="10"
+                HorizontalAlignment="Center">
+            <Image Source="pack://application:,,,/ZenPlatform;component/MVVM/Assets/LineCode.png"
+                   Width="240"
+                   Height="240"
+                   Stretch="Uniform"/>
+        </Border>
+        <TextBlock Text="請透過 LINE 聯絡客服"
+                   Margin="0,16,0,0"
+                   FontSize="15"
+                   Foreground="#FFFF5050"
+                   HorizontalAlignment="Center"
+                   TextAlignment="Center"/>
+    </StackPanel>
+</Window>

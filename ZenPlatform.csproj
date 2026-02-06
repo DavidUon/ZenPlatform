@@ -1,0 +1,113 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="Brokers\\Brokers.csproj" />
+    <ProjectReference Include="Charts\\Charts.csproj" />
+    <ProjectReference Include="KChartCore\\KChartCore.csproj" />
+    <ProjectReference Include="ZClient\\ZClient.csproj" />
+    <ProjectReference Include="TaifexHisDbManager\\TaifexHisDbManager.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Remove="TaifexHisDbManager\\**\\*.cs" />
+    <Page Remove="TaifexHisDbManager\\**\\*.xaml" />
+    <EmbeddedResource Remove="TaifexHisDbManager\\**\\*" />
+    <None Remove="TaifexHisDbManager\\**\\*" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Remove="ZClient\**\*.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Remove="Brokers\\**\\*.cs" />
+    <Page Remove="Brokers\\**\\*.xaml" />
+    <EmbeddedResource Remove="Brokers\\**\\*" />
+    <None Remove="Brokers\\**\\*" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Remove="Utility\\**\\*.cs" />
+    <EmbeddedResource Remove="Utility\\**\\*" />
+    <None Remove="Utility\\**\\*" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Remove="KChartCore\\**\\*.cs" />
+    <Page Remove="KChartCore\\**\\*.xaml" />
+    <EmbeddedResource Remove="KChartCore\\**\\*" />
+    <None Remove="KChartCore\\**\\*" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Remove="Charts\\**\\*.cs" />
+    <Page Remove="Charts\\**\\*.xaml" />
+    <EmbeddedResource Remove="Charts\\**\\*" />
+    <None Remove="Charts\\**\\*" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Remove="Dev_RichTextCtrl\\**\\*.cs" />
+    <Page Remove="Dev_RichTextCtrl\\**\\*.xaml" />
+    <EmbeddedResource Remove="Dev_RichTextCtrl\\**\\*" />
+    <None Remove="Dev_RichTextCtrl\\**\\*" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Remove="Client\\ZClientCtrl\\**\\*.cs" />
+    <EmbeddedResource Remove="Client\\ZClientCtrl\\**\\*" />
+    <None Remove="Client\\ZClientCtrl\\**\\*" />
+  </ItemGroup>
+
+
+  <ItemGroup>
+    <Compile Update="App.xaml.cs">
+      <DependentUpon>App.xaml</DependentUpon>
+    </Compile>
+    <Compile Update="MVVM\Cs\MainWindow.xaml.cs">
+      <DependentUpon>MainWindow.xaml</DependentUpon>
+    </Compile>
+    <Compile Update="Properties\Resources.Designer.cs">
+      <AutoGen>True</AutoGen>
+      <DesignTime>True</DesignTime>
+      <DependentUpon>Resources.resx</DependentUpon>
+    </Compile>
+    <Compile Update="Properties\Settings.Designer.cs">
+      <AutoGen>True</AutoGen>
+      <DependentUpon>Settings.settings</DependentUpon>
+      <DesignTimeSharedInput>True</DesignTimeSharedInput>
+    </Compile>
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Update="Properties\Resources.resx">
+      <Generator>ResXFileCodeGenerator</Generator>
+      <LastGenOutput>Resources.Designer.cs</LastGenOutput>
+    </EmbeddedResource>
+    <Resource Include="MVVM\Assets\LineCode.png" />
+    <None Update="Properties\Settings.settings">
+      <Generator>SettingsSingleFileGenerator</Generator>
+      <LastGenOutput>Settings.Designer.cs</LastGenOutput>
+    </None>
+    <None Include="App.config" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Folder Include="Strategy\" />
+  </ItemGroup>
+
+</Project>

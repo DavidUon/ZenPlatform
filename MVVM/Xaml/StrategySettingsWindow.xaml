@@ -1,0 +1,120 @@
+<Window x:Class="ZenPlatform.StrategySettingsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="策略設定"
+        SizeToContent="WidthAndHeight"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="NoResize"
+        Background="{StaticResource BrushSurface}">
+    <Border Padding="16">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <Grid Grid.Row="1">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="120" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+
+                <TextBlock Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="2" Text="指標設定"
+                           Margin="0,0,0,8" FontWeight="Bold"
+                           FontSize="17"
+                           Foreground="{StaticResource BrushText}"
+                           HorizontalAlignment="Center"
+                           TextAlignment="Center" />
+
+                <TextBlock Grid.Row="1" Grid.Column="0" Text="K線週期" Margin="0,4" />
+                <TextBox Grid.Row="1" Grid.Column="1" x:Name="KbarPeriodBox" Margin="0,4"
+                         Background="{StaticResource BrushInputBackground}"
+                         Foreground="{StaticResource BrushText}"
+                         BorderBrush="{StaticResource BrushInputBorder}"
+                         TextAlignment="Center" />
+
+                <TextBlock Grid.Row="2" Grid.Column="0" Text="K參數" Margin="0,4" />
+                <TextBox Grid.Row="2" Grid.Column="1" x:Name="KPeriodBox" Margin="0,4"
+                         Background="{StaticResource BrushInputBackground}"
+                         Foreground="{StaticResource BrushText}"
+                         BorderBrush="{StaticResource BrushInputBorder}"
+                         TextAlignment="Center" />
+
+                <TextBlock Grid.Row="3" Grid.Column="0" Text="D參數" Margin="0,4" />
+                <TextBox Grid.Row="3" Grid.Column="1" x:Name="DPeriodBox" Margin="0,4"
+                         Background="{StaticResource BrushInputBackground}"
+                         Foreground="{StaticResource BrushText}"
+                         BorderBrush="{StaticResource BrushInputBorder}"
+                         TextAlignment="Center" />
+
+                <TextBlock Grid.Row="4" Grid.Column="0" Text="RSV參數" Margin="0,4" />
+                <TextBox Grid.Row="4" Grid.Column="1" x:Name="RsvPeriodBox" Margin="0,4"
+                         Background="{StaticResource BrushInputBackground}"
+                         Foreground="{StaticResource BrushText}"
+                         BorderBrush="{StaticResource BrushInputBorder}"
+                         TextAlignment="Center" />
+
+                <TextBlock Grid.Row="5" Grid.Column="0" Grid.ColumnSpan="2" Text="下單設定"
+                           Margin="0,8,0,8" FontWeight="Bold"
+                           FontSize="17"
+                           Foreground="{StaticResource BrushText}"
+                           HorizontalAlignment="Center"
+                           TextAlignment="Center" />
+
+                <TextBlock Grid.Row="6" Grid.Column="0" Text="下單口數" Margin="0,4" />
+                <TextBox Grid.Row="6" Grid.Column="1" x:Name="OrderSizeBox" Margin="0,4"
+                         Background="{StaticResource BrushInputBackground}"
+                         Foreground="{StaticResource BrushText}"
+                         BorderBrush="{StaticResource BrushInputBorder}"
+                         TextAlignment="Center" />
+
+                <TextBlock Grid.Row="7" Grid.Column="0" Text="最大任務數" Margin="0,4" />
+                <TextBox Grid.Row="7" Grid.Column="1" x:Name="MaxSessionBox" Margin="0,4"
+                         Background="{StaticResource BrushInputBackground}"
+                         Foreground="{StaticResource BrushText}"
+                         BorderBrush="{StaticResource BrushInputBorder}"
+                         TextAlignment="Center" />
+
+                <TextBlock Grid.Row="8" Grid.Column="0" Grid.ColumnSpan="2" Text="交易參數"
+                           Margin="0,8,0,8" FontWeight="Bold"
+                           FontSize="17"
+                           Foreground="{StaticResource BrushText}"
+                           HorizontalAlignment="Center"
+                           TextAlignment="Center" />
+
+                <TextBlock Grid.Row="9" Grid.Column="0" Text="停利點數" Margin="0,4" />
+                <TextBox Grid.Row="9" Grid.Column="1" x:Name="TakeProfitBox" Margin="0,4"
+                         Background="{StaticResource BrushInputBackground}"
+                         Foreground="{StaticResource BrushText}"
+                         BorderBrush="{StaticResource BrushInputBorder}"
+                         TextAlignment="Center" />
+
+                <TextBlock Grid.Row="10" Grid.Column="0" Text="最大反手次數" Margin="0,4" />
+                <TextBox Grid.Row="10" Grid.Column="1" x:Name="MaxReverseBox" Margin="0,4"
+                         Background="{StaticResource BrushInputBackground}"
+                         Foreground="{StaticResource BrushText}"
+                         BorderBrush="{StaticResource BrushInputBorder}"
+                         TextAlignment="Center" />
+            </Grid>
+
+            <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
+                <Button Content="確定" Width="90" Margin="0,0,12,0" Click="OnOkClick" />
+                <Button Content="取消" Width="90" Click="OnCancelClick" />
+            </StackPanel>
+        </Grid>
+    </Border>
+</Window>

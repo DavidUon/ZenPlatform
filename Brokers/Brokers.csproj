@@ -1,0 +1,46 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <ConcordApiRoot Condition="'$(ConcordApiRoot)'=='' and Exists('$(MSBuildThisFileDirectory)..\康和API')">$(MSBuildThisFileDirectory)..\康和API</ConcordApiRoot>
+    <ConcordApiRoot Condition="'$(ConcordApiRoot)'=='' and Exists('$(MSBuildThisFileDirectory)..\..\康和API')">$(MSBuildThisFileDirectory)..\..\康和API</ConcordApiRoot>
+    <ConcordApiRoot Condition="'$(ConcordApiRoot)'=='' and Exists('$(MSBuildThisFileDirectory)..\..\..\康和API')">$(MSBuildThisFileDirectory)..\..\..\康和API</ConcordApiRoot>
+    <ConcordApiRoot Condition="'$(ConcordApiRoot)'==''">$(MSBuildThisFileDirectory)..\康和API</ConcordApiRoot>
+    <ConcordApiClientDll>$(ConcordApiRoot)\20250407_期貨API\期貨API元件\Concord.API.Future.Client.dll</ConcordApiClientDll>
+    <ConcordApiAtlDll>$(ConcordApiRoot)\20250407_期貨API\期貨API元件\ConcordsCAPIATL.dll</ConcordApiAtlDll>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Reference Include="Concord.API.Future.Client">
+      <HintPath>$(ConcordApiClientDll)</HintPath>
+    </Reference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="NLog" Version="5.3.4" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="$(ConcordApiClientDll)" Condition="Exists('$(ConcordApiClientDll)')">
+      <Link>Concord.API.Future.Client.dll</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>Always</CopyToPublishDirectory>
+    </None>
+    <None Include="$(ConcordApiAtlDll)" Condition="Exists('$(ConcordApiAtlDll)')">
+      <Link>ConcordsCAPIATL.dll</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>Always</CopyToPublishDirectory>
+    </None>
+  </ItemGroup>
+
+  <Target Name="EnsureConcordApiDllExists" BeforeTargets="ResolveReferences">
+    <Error Condition="!Exists('$(ConcordApiClientDll)')" Text="找不到康和期貨 API DLL，請設定 ConcordApiRoot 指向含有 20250407_期貨API 的資料夾。" />
+  </Target>
+
+</Project>
