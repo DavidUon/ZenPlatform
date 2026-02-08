@@ -38,27 +38,27 @@
 
                     <TextBlock Grid.Row="0" Grid.Column="0" Text="目前部位" Margin="0,2,5,2" VerticalAlignment="Center" />
                     <TextBlock Grid.Row="0" Grid.Column="1"
-                               Text="{Binding ElementName=SessionGrid, Path=SelectedItem.PositionText, TargetNullValue=多單 1 口, FallbackValue=多單 1 口}"
+                               Text="{Binding SummaryPositionText}"
                                VerticalAlignment="Center" />
 
                     <TextBlock Grid.Row="1" Grid.Column="0" Text="浮動損益" Margin="0,2,5,2" VerticalAlignment="Center" />
                     <TextBlock Grid.Row="1" Grid.Column="1"
-                               Text="{Binding ElementName=SessionGrid, Path=SelectedItem.FloatProfit, StringFormat={}{0:F1}, TargetNullValue=235.0, FallbackValue=235.0}"
+                               Text="{Binding SummaryFloatProfit, StringFormat={}{0:F1}}"
                                VerticalAlignment="Center" />
 
                     <TextBlock Grid.Row="2" Grid.Column="0" Text="平倉損益" Margin="0,2,5,2" VerticalAlignment="Center" />
                     <TextBlock Grid.Row="2" Grid.Column="1"
-                               Text="{Binding ElementName=SessionGrid, Path=SelectedItem.RealizedProfit, StringFormat={}{0:F1}, TargetNullValue=-50.0, FallbackValue=-50.0}"
+                               Text="{Binding SummaryRealizedProfit, StringFormat={}{0:F1}}"
                                VerticalAlignment="Center" />
 
                     <TextBlock Grid.Row="3" Grid.Column="0" Text="交易次數" Margin="0,2,5,2" VerticalAlignment="Center" />
                     <TextBlock Grid.Row="3" Grid.Column="1"
-                               Text="{Binding ElementName=SessionGrid, Path=SelectedItem.TradeCount, TargetNullValue=3, FallbackValue=3}"
+                               Text="{Binding SummaryTradeCount}"
                                VerticalAlignment="Center" />
 
                     <TextBlock Grid.Row="4" Grid.Column="0" Text="總損益" Margin="0,2,5,2" VerticalAlignment="Center" />
                     <TextBlock Grid.Row="4" Grid.Column="1"
-                               Text="{Binding ElementName=SessionGrid, Path=SelectedItem.TotalProfit, StringFormat={}{0:F1}, TargetNullValue=185.0, FallbackValue=185.0}"
+                               Text="{Binding SummaryTotalProfit, StringFormat={}{0:F1}}"
                                VerticalAlignment="Center" />
                 </Grid>
             </Grid>
@@ -66,8 +66,15 @@
             <DataGrid x:Name="SessionGrid" Grid.Column="1"
                       AutoGenerateColumns="False"
                       CanUserAddRows="False"
+                      IsReadOnly="True"
+                      SelectionUnit="FullRow"
+                      SelectionMode="Single"
                       HeadersVisibility="Column"
                       ItemsSource="{Binding Sessions}"
+                      ContextMenuOpening="OnSessionGridContextMenuOpening"
+                      PreviewMouseRightButtonDown="OnSessionGridRightButtonDown"
+                      PreviewMouseLeftButtonDown="OnSessionGridLeftButtonDown"
+                      LostFocus="OnSessionGridLostFocus"
                       Background="{StaticResource BrushInputBackground}"
                       Foreground="{StaticResource BrushText}"
                       BorderBrush="{StaticResource BrushBorder}"
@@ -105,6 +112,13 @@
                         </Style.Triggers>
                     </Style>
                 </DataGrid.CellStyle>
+                <DataGrid.ContextMenu>
+                    <ContextMenu>
+                        <MenuItem x:Name="CloseSessionMenuItem"
+                                  Header="任務平倉且結束"
+                                  Click="OnCloseSessionClick" />
+                    </ContextMenu>
+                </DataGrid.ContextMenu>
                 <DataGrid.Columns>
                     <DataGridTextColumn Header="編號" Binding="{Binding Id}" Width="57.43">
                         <DataGridTextColumn.ElementStyle>
@@ -206,6 +220,14 @@
                                 <Setter Property="Background" Value="{StaticResource BrushInputBorder}" />
                                 <Setter Property="Foreground" Value="{StaticResource BrushText}" />
                             </Trigger>
+                            <MultiTrigger>
+                                <MultiTrigger.Conditions>
+                                    <Condition Property="IsSelected" Value="True" />
+                                    <Condition Property="Selector.IsSelectionActive" Value="False" />
+                                </MultiTrigger.Conditions>
+                                <Setter Property="Background" Value="{StaticResource BrushInputBorder}" />
+                                <Setter Property="Foreground" Value="{StaticResource BrushText}" />
+                            </MultiTrigger>
                         </Style.Triggers>
                     </Style>
                 </DataGrid.RowStyle>

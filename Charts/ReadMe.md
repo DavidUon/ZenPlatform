@@ -27,6 +27,8 @@ Charts Library 設計說明
   - 介面 IOverlayIndicator：OnDataChanged/OnViewportChanged/OnCrosshairIndexChanged/Draw/GetInfoLines。
   - MaOverlay：SMA/EMA，顏色可自訂，於左側「均線」區塊顯示 MA 值與方向箭頭。
   - BollingerOverlay：Mid/Up/Low 計算與帶狀填色，12 色 + 透明度設定，於左側「布林通道」區塊顯示值與箭頭。
+  - BbiOverlay：BBI（MA3/6/12/24 平均），顏色可自訂，於左側「BBI」區塊顯示值與方向箭頭。
+  - BbiOverlay：BBI（MA3/6/12/24 平均），顯示於左側「BBI」區塊。
 
 - 副圖指標（Charts/*.Pane.cs）
   - VolumePane：成交量長條；Y 軸固定 0 位小數；左側顯示 Vol。
@@ -36,7 +38,7 @@ Charts Library 設計說明
 - UI 組件
   - PriceInfoPanel：左側資訊區。標題列 + 可多段 Section（均線、布林通道…），每行右對齊數值與方向箭頭。
   - CrosshairTooltip：主圖游標提示，顯示 OHLC 與可擴充的資訊。
-  - 設定視窗：MaSettingsDialog、BollSettingsDialog、KdSettingsDialog、MacdSettingsDialog。
+- 設定視窗：MaSettingsDialog（可一次設定多條）、BollSettingsDialog、KdSettingsDialog、MacdSettingsDialog。
 
 - 其他
   - CoordinateCalculator：座標換算與游標索引計算。
@@ -49,7 +51,7 @@ Charts Library 設計說明
 - 內容：
   - PriceDecimals：價格顯示小數位數（預設 0；成交量總為 0）。
   - RowHeights：主圖與各副圖的 Star 權重集合（總和 1）。
-  - Overlays：主圖疊加（MA/BOLL）型別與參數／色彩。
+  - Overlays：主圖疊加（MA/BOLL/BBI）型別與參數／色彩（BBI 支援 4 組期間）。
   - Indicators：副圖清單（VOL/KD/MACD）及其參數。
 - 載入策略：
   - 自動在 MultiPaneChartView Loaded 時載入；若 RowHeights 與現有窗格數不符則改用預設比例（主圖 0.7、其餘平均）。
@@ -65,7 +67,7 @@ Charts Library 設計說明
 
 - 左側資訊面板（主圖）
   - 標題「K線圖」。
-  - 區塊：均線、布林通道；標題列深灰色；內容右對齊數值，並以紅▲/綠▼ 指示與前一根的變化方向（持平延續前一次方向）。
+  - 區塊：均線、布林通道、BBI；標題列深灰色；內容右對齊數值，並以紅▲/綠▼ 指示與前一根的變化方向（持平延續前一次方向）。
 
 - 軸與小數位
   - SetPriceDecimalPlaces(n) 可調整主圖價格小數位；套用於 Y 軸、十字線價格框、最高/最低點標籤、Overlay 計算的輸出。
@@ -139,6 +141,11 @@ MainChart.AddMaOverlay(period:20, maType:"SMA", color:Colors.Gold);
 MainChart.RemoveMaOverlayByPeriod(20);
 MainChart.ClearMaOverlays();
 
+// BBI
+MainChart.AddBbiOverlay();
+MainChart.RemoveBbiOverlay();
+MainChart.SetOverlayPara_Bbi(this);
+
 // 布林通道（可用設定視窗）
 MainChart.AddBollingerOverlay(period:20, k:2.0);
 MainChart.SetOverlayPara_Bollinger(this);
@@ -164,9 +171,10 @@ API 一覽（主要）
   - `SetPriceDecimals(int places)`
   - `AddIndicatorPanel(IndicatorPanelType)` / `RemoveIndicatorPanel(IndicatorPanelType)` / `HasIndicatorPanel`
 - `AddBollingerOverlay(int, double, Color?, double)` / `RemoveBollingerOverlay()` / `SetOverlayPara_Bollinger(Window?)`
+- `AddBbiOverlay(Color?)` / `RemoveBbiOverlay()` / `SetOverlayPara_Bbi(Window?)`
 - `AddMaOverlay(int, string, Color)` / `RemoveMaOverlayByPeriod(int)` / `ClearMaOverlays()` / `SetOverlayPara_Ma(Window?)`
 - `PromptRemoveMaOverlayByPeriod(Window?)`：由 Charts 內建視窗詢問期間後移除對應均線
-- `ShowAppearLayerWindow(Window?)`：開啟圖層顯示視窗（勾選成交量/KD/MACD、MA、BOLL）
+- `ShowAppearLayerWindow(Window?)`：開啟圖層顯示視窗（勾選成交量/KD/MACD、MA、BBI、BOLL）
 - `UseDefaultTimeframeBar()`：將內建 TimeframeBar 放到主圖右上角並回傳控制項（訂閱 `OnTimeframeChange` 即可）
 
 ### TimeframeBar（內建控制項）

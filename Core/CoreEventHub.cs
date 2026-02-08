@@ -1,6 +1,7 @@
 using System;
 using ZenPlatform.SessionManager;
 using ZenPlatform.Debug;
+using ZenPlatform.Trade;
 
 namespace ZenPlatform.Core
 {
@@ -8,11 +9,13 @@ namespace ZenPlatform.Core
     {
         private readonly SessionManager.SessionManager[] _sessionManagers;
         private readonly KChartBridge _chartBridge;
+        private readonly TradeCtrl _tradeCtrl;
 
-        public CoreEventHub(SessionManager.SessionManager[] sessionManagers, KChartBridge chartBridge)
+        public CoreEventHub(SessionManager.SessionManager[] sessionManagers, KChartBridge chartBridge, TradeCtrl tradeCtrl)
         {
             _sessionManagers = sessionManagers ?? throw new ArgumentNullException(nameof(sessionManagers));
             _chartBridge = chartBridge ?? throw new ArgumentNullException(nameof(chartBridge));
+            _tradeCtrl = tradeCtrl ?? throw new ArgumentNullException(nameof(tradeCtrl));
             _chartBridge.KBarCompleted += OnKBarCompleted;
         }
 
@@ -38,17 +41,12 @@ namespace ZenPlatform.Core
                     continue;
                 }
 
-                if (manager.Indicators == null)
+                if (!manager.IsKBarPeriodRegistered(period))
                 {
                     continue;
                 }
 
-                if (manager.RuleSet.KbarPeriod != period)
-                {
-                    continue;
-                }
-
-                lock (manager.IndicatorSync)
+                if (manager.RuleSet.KbarPeriod == period)
                 {
                     var closeStamp = new DateTime(bar.CloseTime.Year, bar.CloseTime.Month, bar.CloseTime.Day,
                         bar.CloseTime.Hour, bar.CloseTime.Minute, 0, DateTimeKind.Unspecified);
@@ -57,19 +55,30 @@ namespace ZenPlatform.Core
                         continue;
                     }
 
-                    manager.Indicators.Update(new ZenPlatform.Indicators.KBar(bar.StartTime, bar.Open, bar.High, bar.Low, bar.Close, bar.Volume));
-                    if (manager.SuppressIndicatorLog)
+                    if (manager.Indicators != null)
                     {
-                        // Suppressed during history import.
-                    }
-                    // KDJ log comes only from RebuildIndicators for a single source of truth.
+                        lock (manager.IndicatorSync)
+                        {
+                            manager.Indicators.Update(new ZenPlatform.Indicators.KBar(bar.StartTime, bar.Open, bar.High, bar.Low, bar.Close, bar.Volume));
+                            if (manager.SuppressIndicatorLog)
+                            {
+                                // Suppressed during history import.
+                            }
+                            // KDJ log comes only from RebuildIndicators for a single source of truth.
 
-                    manager.LastIndicatorBarCloseTime = closeStamp;
-                    if (manager.IndicatorsReadyForLog && !manager.SuppressIndicatorLog)
+                            manager.LastIndicatorBarCloseTime = closeStamp;
+                            if (manager.IndicatorsReadyForLog && !manager.SuppressIndicatorLog)
+                            {
+                            }
+                        }
+                    }
+                    else
                     {
-                        DebugBus.Send($"[M{manager.Index + 1}] {manager.BuildIndicatorSnapshot()}", "指標");
+                        manager.LastIndicatorBarCloseTime = closeStamp;
                     }
                 }
+
+                manager.OnKBarCompleted(period, bar);
             }
         }
 
@@ -92,6 +101,7 @@ namespace ZenPlatform.Core
 
             if (item.Type == CoreQueueType.PriceUpdate && item.Quote != null)
             {
+                _tradeCtrl.OnQuote(item.Quote);
                 foreach (var manager in _sessionManagers)
                 {
                     if (manager.IsStrategyRunning && manager.AcceptPriceTicks)
@@ -105,7 +115,7 @@ namespace ZenPlatform.Core
                 }
             }
 
-        _chartBridge.Handle(item);
+            _chartBridge.Handle(item);
             ItemReceived?.Invoke(this, item);
             ItemDispatched?.Invoke(this, item);
         }

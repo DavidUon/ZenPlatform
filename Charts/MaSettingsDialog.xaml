@@ -8,9 +8,9 @@
         <SolidColorBrush x:Key="PanelBg" Color="#18181D"/>
         <SolidColorBrush x:Key="InputBg" Color="#202027"/>
         <SolidColorBrush x:Key="BorderDark" Color="#3C3C46"/>
-        <Style TargetType="RadioButton">
-            <Setter Property="Foreground" Value="#FFFFFF"/>
-        </Style>
+        <SolidColorBrush x:Key="BrushButtonBackground" Color="#2A2F3A"/>
+        <SolidColorBrush x:Key="BrushButtonBorder" Color="#3C3C46"/>
+        <SolidColorBrush x:Key="BrushText" Color="#E8E8E8"/>
         <Style TargetType="TextBox">
             <Setter Property="Background" Value="{StaticResource InputBg}"/>
             <Setter Property="Foreground" Value="#F0F0F0"/>
@@ -24,12 +24,98 @@
             <Setter Property="BorderBrush" Value="{StaticResource BorderDark}"/>
             <Setter Property="BorderThickness" Value="1"/>
         </Style>
-        <Style TargetType="Button">
-            <Setter Property="Padding" Value="10,6"/>
-            <Setter Property="Background" Value="#333645"/>
-            <Setter Property="Foreground" Value="#FFFFFF"/>
-            <Setter Property="BorderBrush" Value="{StaticResource BorderDark}"/>
+        <Style x:Key="StrategyButtonStyle" TargetType="Button">
+            <Setter Property="Background" Value="{StaticResource BrushButtonBackground}" />
+            <Setter Property="Foreground" Value="{StaticResource BrushText}" />
+            <Setter Property="BorderBrush" Value="{StaticResource BrushButtonBorder}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Padding" Value="8,2" />
+            <Setter Property="MinWidth" Value="80" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="{x:Type Button}">
+                        <Border x:Name="Border"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}">
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"
+                                              Margin="{TemplateBinding Padding}" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Border" Property="Background" Value="#FF787878" />
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Border" Property="Background" Value="#FF606060" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="Border" Property="Opacity" Value="0.5" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="SwatchButtonStyle" TargetType="Button">
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="MinWidth" Value="0"/>
+            <Setter Property="MinHeight" Value="0"/>
+            <Setter Property="BorderBrush" Value="#2A2A33"/>
             <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="2"/>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="DarkComboBoxStyle" TargetType="ComboBox">
+            <Setter Property="Background" Value="#1E1E28"/>
+            <Setter Property="Foreground" Value="#E6E6E6"/>
+            <Setter Property="BorderBrush" Value="#2A2A33"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="6,2,24,2"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ComboBox">
+                        <Grid>
+                            <Border x:Name="Bd" Background="{TemplateBinding Background}"
+                                    BorderBrush="{TemplateBinding BorderBrush}"
+                                    BorderThickness="{TemplateBinding BorderThickness}"
+                                    CornerRadius="2"/>
+                            <ContentPresenter Margin="{TemplateBinding Padding}"
+                                              VerticalAlignment="Center"
+                                              HorizontalAlignment="Left"
+                                              Content="{TemplateBinding SelectionBoxItem}"
+                                              ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}"/>
+                            <ToggleButton x:Name="DropDownToggle" Focusable="False"
+                                          Background="Transparent" BorderThickness="0"
+                                          HorizontalAlignment="Right" Width="22"
+                                          IsChecked="{Binding IsDropDownOpen, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}">
+                                <Path Data="M 0 0 L 4 4 L 8 0 Z" Fill="#CFCFD6" Stretch="Uniform" />
+                            </ToggleButton>
+                            <Popup x:Name="Popup" Placement="Bottom" IsOpen="{TemplateBinding IsDropDownOpen}"
+                                   AllowsTransparency="True" Focusable="False" PopupAnimation="Fade">
+                                <Border Background="#1E1E28" BorderBrush="#2A2A33" BorderThickness="1" CornerRadius="2">
+                                    <ScrollViewer Margin="2" SnapsToDevicePixels="True">
+                                        <ItemsPresenter/>
+                                    </ScrollViewer>
+                                </Border>
+                            </Popup>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.6"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
         </Style>
     </Window.Resources>
 
@@ -39,54 +125,127 @@
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="Auto"/>
-                <RowDefinition Height="Auto"/>
                 <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
             </Grid.RowDefinitions>
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="120"/>
-                <ColumnDefinition Width="*"/>
-            </Grid.ColumnDefinitions>
 
-            <!-- 操作：新增 / 刪除 -->
-            <TextBlock Text="操作：" Margin="0,0,8,10"/>
-            <StackPanel Grid.Column="1" Orientation="Horizontal" Margin="0,0,0,10">
-                <RadioButton x:Name="RbAdd" Content="新增" IsChecked="True" Margin="0,0,12,0"/>
-                <RadioButton x:Name="RbRemove" Content="刪除"/>
+            <DataGrid x:Name="MaGrid" Grid.Row="1" AutoGenerateColumns="False" HeadersVisibility="Column"
+                      CanUserAddRows="False" CanUserDeleteRows="False" Margin="0,0,0,10"
+                      Background="#121218" Foreground="#E6E6E6" BorderBrush="{StaticResource BorderDark}"
+                      GridLinesVisibility="None" RowHeaderWidth="0" MinWidth="420"
+                      SelectionMode="Single" SelectionUnit="FullRow">
+                <DataGrid.Resources>
+                    <Style TargetType="DataGridColumnHeader">
+                        <Setter Property="Background" Value="#1A1A22"/>
+                        <Setter Property="Foreground" Value="#CFCFD6"/>
+                        <Setter Property="BorderBrush" Value="#2A2A33"/>
+                        <Setter Property="BorderThickness" Value="0,0,0,1"/>
+                        <Setter Property="Padding" Value="6,4"/>
+                        <Setter Property="HorizontalContentAlignment" Value="Center"/>
+                    </Style>
+                    <Style TargetType="DataGridRow">
+                        <Setter Property="Background" Value="#14141B"/>
+                        <Setter Property="Foreground" Value="#E6E6E6"/>
+                        <Style.Triggers>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter Property="Background" Value="#1E2230"/>
+                                <Setter Property="Foreground" Value="#FFFFFF"/>
+                            </Trigger>
+                        </Style.Triggers>
+                    </Style>
+                    <Style TargetType="DataGridCell">
+                        <Setter Property="BorderBrush" Value="#1F1F28"/>
+                        <Setter Property="BorderThickness" Value="0,0,0,1"/>
+                        <Style.Triggers>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter Property="Background" Value="#1E2230"/>
+                                <Setter Property="Foreground" Value="#FFFFFF"/>
+                            </Trigger>
+                        </Style.Triggers>
+                    </Style>
+                    <Style TargetType="ComboBox">
+                        <Setter Property="Background" Value="#1E1E28"/>
+                        <Setter Property="Foreground" Value="#E6E6E6"/>
+                        <Setter Property="BorderBrush" Value="#2A2A33"/>
+                        <Setter Property="BorderThickness" Value="1"/>
+                    </Style>
+                    <Style TargetType="TextBox">
+                        <Setter Property="Background" Value="#1E1E28"/>
+                        <Setter Property="Foreground" Value="#E6E6E6"/>
+                        <Setter Property="BorderBrush" Value="#2A2A33"/>
+                        <Setter Property="BorderThickness" Value="1"/>
+                    </Style>
+                </DataGrid.Resources>
+                <DataGrid.Columns>
+                    <DataGridTemplateColumn Header="型態" Width="80">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <ComboBox Width="70"
+                                          Style="{StaticResource DarkComboBoxStyle}"
+                                          ItemsSource="{Binding DataContext.MaTypes, RelativeSource={RelativeSource AncestorType=Window}}"
+                                          SelectedItem="{Binding MaType, Mode=TwoWay}">
+                                    <ComboBox.Resources>
+                                        <Style TargetType="ComboBoxItem">
+                                            <Setter Property="Background" Value="#1E1E28"/>
+                                            <Setter Property="Foreground" Value="#E6E6E6"/>
+                                            <Setter Property="BorderBrush" Value="#2A2A33"/>
+                                            <Setter Property="BorderThickness" Value="0"/>
+                                            <Style.Triggers>
+                                                <Trigger Property="IsHighlighted" Value="True">
+                                                    <Setter Property="Background" Value="#2A2A36"/>
+                                                </Trigger>
+                                                <Trigger Property="IsSelected" Value="True">
+                                                    <Setter Property="Background" Value="#2A2A36"/>
+                                                </Trigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </ComboBox.Resources>
+                                </ComboBox>
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+                    <DataGridTextColumn Header="期間" Width="80" Binding="{Binding Period}">
+                        <DataGridTextColumn.ElementStyle>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="FontSize" Value="15"/>
+                                <Setter Property="TextAlignment" Value="Center"/>
+                                <Setter Property="HorizontalAlignment" Value="Center"/>
+                                <Setter Property="VerticalAlignment" Value="Center"/>
+                            </Style>
+                        </DataGridTextColumn.ElementStyle>
+                        <DataGridTextColumn.EditingElementStyle>
+                            <Style TargetType="TextBox">
+                                <Setter Property="FontSize" Value="15"/>
+                                <Setter Property="TextAlignment" Value="Center"/>
+                                <Setter Property="HorizontalContentAlignment" Value="Center"/>
+                                <Setter Property="VerticalContentAlignment" Value="Center"/>
+                            </Style>
+                        </DataGridTextColumn.EditingElementStyle>
+                    </DataGridTextColumn>
+                    <DataGridTemplateColumn Header="顏色" Width="200">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <Button Width="60" Height="22" Click="PickColor_Click"
+                                        Style="{StaticResource SwatchButtonStyle}"
+                                        Background="{Binding ColorBrush}" />
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+                </DataGrid.Columns>
+            </DataGrid>
+
+            <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,0,0,10">
+                <Button Width="34" Height="28" Margin="0,0,6,0" Content="+" Click="AddRow_Click"
+                        Style="{StaticResource StrategyButtonStyle}" MinWidth="0" Padding="0"/>
+                <Button Width="34" Height="28" Content="-" Click="RemoveRow_Click"
+                        Style="{StaticResource StrategyButtonStyle}" MinWidth="0" Padding="0"/>
             </StackPanel>
 
-            <TextBlock Text="期間 (N)：" Grid.Row="1" Margin="0,0,8,10"/>
-            <TextBox x:Name="PeriodBox" Grid.Row="1" Grid.Column="1" Margin="0,0,0,10"/>
-
-            <TextBlock Text="型態：" Grid.Row="2" Margin="0,0,8,10"/>
-            <!-- 覆蓋本欄的前景為黑色、背景白，以利辨識 -->
-            <ComboBox x:Name="TypeBox" Grid.Row="2" Grid.Column="1" Margin="0,0,0,10" Background="White" Foreground="Black">
-                <ComboBoxItem Content="MA"/>
-                <ComboBoxItem Content="EMA"/>
-            </ComboBox>
-
-            <TextBlock Text="線條顏色：" Grid.Row="3" Margin="0,0,8,10"/>
-            <StackPanel x:Name="ColorPanel" Grid.Row="3" Grid.Column="1" Orientation="Horizontal">
-                <UniformGrid Columns="6" Rows="2">
-                    <!-- 12 常用顏色 -->
-                    <Button Width="22" Height="22" Margin="2" Background="#FFD700" Click="Color_Click" Tag="#FFD700"/>
-                    <Button Width="22" Height="22" Margin="2" Background="#64A0FF" Click="Color_Click" Tag="#64A0FF"/>
-                    <Button Width="22" Height="22" Margin="2" Background="#FF6B6B" Click="Color_Click" Tag="#FF6B6B"/>
-                    <Button Width="22" Height="22" Margin="2" Background="#2ECC71" Click="Color_Click" Tag="#2ECC71"/>
-                    <Button Width="22" Height="22" Margin="2" Background="#FFA500" Click="Color_Click" Tag="#FFA500"/>
-                    <Button Width="22" Height="22" Margin="2" Background="#9B59B6" Click="Color_Click" Tag="#9B59B6"/>
-                    <Button Width="22" Height="22" Margin="2" Background="#1ABC9C" Click="Color_Click" Tag="#1ABC9C"/>
-                    <Button Width="22" Height="22" Margin="2" Background="#E91E63" Click="Color_Click" Tag="#E91E63"/>
-                    <Button Width="22" Height="22" Margin="2" Background="#00BCD4" Click="Color_Click" Tag="#00BCD4"/>
-                    <Button Width="22" Height="22" Margin="2" Background="#CDDC39" Click="Color_Click" Tag="#CDDC39"/>
-                    <Button Width="22" Height="22" Margin="2" Background="#FFC107" Click="Color_Click" Tag="#FFC107"/>
-                    <Button Width="22" Height="22" Margin="2" Background="#95A5A6" Click="Color_Click" Tag="#95A5A6"/>
-                </UniformGrid>
-                <TextBox x:Name="ColorBox" Width="90" Margin="8,0,0,0" IsReadOnly="True"/>
-            </StackPanel>
-
-            <StackPanel Grid.Row="4" Grid.ColumnSpan="2" Orientation="Horizontal" HorizontalAlignment="Right">
-                <Button Width="90" Margin="4" Content="確定" IsDefault="True" Click="Ok_Click"/>
-                <Button Width="90" Margin="4" Content="取消" IsCancel="True"/>
+            <StackPanel Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Right">
+                <Button Width="90" Margin="4" Content="確定" IsDefault="True" Click="Ok_Click"
+                        Style="{StaticResource StrategyButtonStyle}"/>
+                <Button Width="90" Margin="4" Content="取消" IsCancel="True"
+                        Style="{StaticResource StrategyButtonStyle}"/>
             </StackPanel>
         </Grid>
     </Border>

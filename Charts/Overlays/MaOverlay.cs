@@ -94,6 +94,7 @@ namespace Charts
             int count = _bars.Count;
             _ma = new double[count];
             if (count == 0) return;
+            string key = _maType == "EMA" ? $"EMA{_period}" : $"MA{_period}";
 
             if (_maType == "EMA")
             {
@@ -104,6 +105,7 @@ namespace Charts
                     double c = (double)_bars[i].Close;
                     ema = ema + alpha * (c - ema);
                     _ma[i] = ema;
+                    _bars[i].Indicators[key] = (decimal)ema;
                 }
             }
             else // SMA
@@ -116,6 +118,7 @@ namespace Charts
                     win.Enqueue(c); sum += c;
                     if (win.Count > n) sum -= win.Dequeue();
                     _ma[i] = sum / win.Count;
+                    _bars[i].Indicators[key] = (decimal)_ma[i];
                 }
             }
         }

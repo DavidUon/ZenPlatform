@@ -1,27 +1,28 @@
 using System.Windows;
-using ZenPlatform.Strategy;
-
 namespace ZenPlatform
 {
-    public partial class SessionEntryWindow : Window
+    public partial class SelectSideWindow : Window
     {
-        public SessionEntryWindow()
+        public SelectSideWindow()
         {
             InitializeComponent();
         }
 
-        public SessionSide? SelectedSide { get; private set; }
+        public bool? SelectedIsBuy { get; private set; }
 
         private void OnLongClick(object sender, RoutedEventArgs e)
         {
-            SelectedSide = SessionSide.Long;
+            SelectedIsBuy = true;
             DialogResult = true;
+            Close();
         }
 
         private void OnShortClick(object sender, RoutedEventArgs e)
         {
-            SelectedSide = SessionSide.Short;
+            SelectedIsBuy = false;
             DialogResult = true;
+            Close();
         }
+
     }
 }

@@ -9,8 +9,10 @@ namespace Charts
     {
         public int Period { get; private set; }
         public double K { get; private set; }
-        public Color FillColor { get; private set; } = Color.FromRgb(100,160,255);
-        public double FillOpacity { get; private set; } = 0.2; // 0..1
+        public Color FillColor { get; private set; } = Color.FromRgb(0xB7,0xB8,0xB7);
+        public Color EdgeColor { get; private set; } = Color.FromRgb(0xB4,0xB4,0xB4);
+        public Color MidColor { get; private set; } = Color.FromRgb(0xD7,0xD4,0xD5);
+        public double FillOpacity { get; private set; } = 0.059597315436241624; // 0..1
 
         public BollSettingsDialog(int period, double k)
         {
@@ -20,13 +22,14 @@ namespace Charts
             PeriodBox.Text = period.ToString();
             KBox.Text = k.ToString(CultureInfo.InvariantCulture);
             // 預設顏色、透明度
-            SelectColor(Color.FromRgb(0x64,0xA0,0xFF));
-            FillBox.Text = "#64A0FF";
-            OpacitySlider.Value = 20;
+            SelectFillColor(Color.FromRgb(0xB7,0xB8,0xB7));
+            SelectEdgeColor(Color.FromRgb(0xB4,0xB4,0xB4));
+            SelectMidColor(Color.FromRgb(0xD7,0xD4,0xD5));
+            OpacitySlider.Value = 5.9597;
             OpacitySlider.ValueChanged += (s,e)=> { OpacityText.Text = ((int)OpacitySlider.Value).ToString()+"%"; };
         }
 
-        public BollSettingsDialog(int period, double k, Color fill, double opacity)
+        public BollSettingsDialog(int period, double k, Color fill, Color edge, Color mid, double opacity)
         {
             ChartFontManager.EnsureInitialized();
             InitializeComponent();
@@ -34,8 +37,9 @@ namespace Charts
             PeriodBox.Text = period.ToString();
             KBox.Text = k.ToString(CultureInfo.InvariantCulture);
             // 設定外觀為當前值
-            SelectColor(fill);
-            FillBox.Text = string.Format("#{0:X2}{1:X2}{2:X2}", fill.R, fill.G, fill.B);
+            SelectFillColor(fill);
+            SelectEdgeColor(edge);
+            SelectMidColor(mid);
             var percent = (int)Math.Round(Math.Max(0, Math.Min(1, opacity)) * 100.0);
             OpacitySlider.Value = percent;
             OpacityText.Text = percent + "%";
@@ -46,28 +50,50 @@ namespace Charts
         {
             if (!int.TryParse(PeriodBox.Text, out var p) || p <= 0) { MessageBox.Show("期間(N) 必須為正整數"); return; }
             if (!double.TryParse(KBox.Text, NumberStyles.Float, CultureInfo.InvariantCulture, out var k) || k <= 0) { MessageBox.Show("K 必須為正數"); return; }
-            Period = p; K = k; FillColor = _selColor; FillOpacity = OpacitySlider.Value / 100.0;
+            Period = p; K = k; FillColor = _fillColor; EdgeColor = _edgeColor; MidColor = _midColor; FillOpacity = OpacitySlider.Value / 100.0;
             DialogResult = true;
         }
 
-        private Color _selColor;
-        private void SelectColor(Color c)
+        private Color _fillColor;
+        private Color _edgeColor;
+        private Color _midColor;
+        private void SelectFillColor(Color c)
         {
-            _selColor = c; // 顏色高亮（可加邊框效果，簡化略過）
-            FillBox.Text = string.Format("#{0:X2}{1:X2}{2:X2}", c.R, c.G, c.B);
+            _fillColor = c;
+            FillSwatch.Background = new SolidColorBrush(c);
         }
 
-        private void Color_Click(object sender, RoutedEventArgs e)
+        private void PickFillColor_Click(object sender, RoutedEventArgs e)
         {
-            if (sender is System.Windows.Controls.Button b)
-            {
-                try
-                {
-                    var col = (Color)ColorConverter.ConvertFromString(b.Tag?.ToString() ?? "#64A0FF");
-                    SelectColor(col);
-                }
-                catch { }
-            }
+            var dlg = new ColorPickerDialog(_fillColor) { Owner = this };
+            if (dlg.ShowDialog() == true)
+                SelectFillColor(dlg.SelectedColor);
+        }
+
+        private void SelectEdgeColor(Color c)
+        {
+            _edgeColor = c;
+            EdgeSwatch.Background = new SolidColorBrush(c);
+        }
+
+        private void SelectMidColor(Color c)
+        {
+            _midColor = c;
+            MidSwatch.Background = new SolidColorBrush(c);
+        }
+
+        private void PickEdgeColor_Click(object sender, RoutedEventArgs e)
+        {
+            var dlg = new ColorPickerDialog(_edgeColor) { Owner = this };
+            if (dlg.ShowDialog() == true)
+                SelectEdgeColor(dlg.SelectedColor);
+        }
+
+        private void PickMidColor_Click(object sender, RoutedEventArgs e)
+        {
+            var dlg = new ColorPickerDialog(_midColor) { Owner = this };
+            if (dlg.ShowDialog() == true)
+                SelectMidColor(dlg.SelectedColor);
         }
     }
 }

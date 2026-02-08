@@ -34,9 +34,9 @@ namespace KChartCore
                     : tradingCalendarPath;
                 _tradingCalendar = new TradingCalendar(calendarPath);
             }
-            catch (Exception ex)
+            catch
             {
-                Console.WriteLine($"[Warning] Failed to load trading calendar: {ex.Message}");
+                // Ignore calendar load failures and fall back to base schedule.
             }
         }
 

@@ -1,4 +1,9 @@
 using System;
+using System.Collections.Generic;
+using System.Collections.ObjectModel;
+using System.ComponentModel;
+using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Windows;
 using System.Windows.Media;
 
@@ -6,51 +11,113 @@ namespace Charts
 {
     public partial class MaSettingsDialog : Window
     {
-        public int Period { get; private set; }
-        public string MaType { get; private set; } = "SMA";
-        public Color LineColor { get; private set; } = Color.FromRgb(0xFF, 0xD7, 0x00);
-        public bool IsAdd { get; private set; } = true; // 新增 or 刪除
-
-        public MaSettingsDialog(int period, string type)
+        public class MaLine : INotifyPropertyChanged
         {
-            InitializeComponent();
-            Period = period; MaType = type?.ToUpperInvariant() == "EMA" ? "EMA" : "SMA";
-            PeriodBox.Text = Period.ToString();
-            if (MaType == "EMA") TypeBox.SelectedIndex = 1; else TypeBox.SelectedIndex = 0;
-            ColorBox.Text = "#FFD700";
-            RbAdd.Checked += (_, __) => UpdateModeUI();
-            RbRemove.Checked += (_, __) => UpdateModeUI();
-            UpdateModeUI();
+            private string _maType = "MA";
+            private int _period = 20;
+            private Color _color = Color.FromRgb(0xFF, 0xD7, 0x00);
+            private SolidColorBrush _brush;
+
+            public MaLine()
+            {
+                _brush = new SolidColorBrush(_color);
+            }
+
+            public string MaType
+            {
+                get => _maType;
+                set { _maType = (value == "EMA") ? "EMA" : "MA"; OnPropertyChanged(); }
+            }
+
+            public int Period
+            {
+                get => _period;
+                set { _period = value; OnPropertyChanged(); }
+            }
+
+            public Color Color
+            {
+                get => _color;
+                set
+                {
+                    _color = value;
+                    _brush = new SolidColorBrush(_color);
+                    OnPropertyChanged();
+                    OnPropertyChanged(nameof(ColorBrush));
+                }
+            }
+
+            public SolidColorBrush ColorBrush => _brush;
+
+            public event PropertyChangedEventHandler? PropertyChanged;
+            private void OnPropertyChanged([CallerMemberName] string? name = null)
+                => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
         }
 
-        private void UpdateModeUI()
+        public IReadOnlyList<string> MaTypes { get; } = new[] { "MA", "EMA" };
+        public ObservableCollection<MaLine> Lines { get; } = new();
+
+        public IReadOnlyList<MaLine> ResultLines { get; private set; } = Array.Empty<MaLine>();
+
+        public MaSettingsDialog(IEnumerable<(int period, string maType, Color color)>? lines)
         {
-            bool add = RbAdd.IsChecked == true;
-            TypeBox.IsEnabled = add;
-            ColorPanel.IsEnabled = add;
+            InitializeComponent();
+            DataContext = this;
+
+            var items = lines?.ToList() ?? new List<(int, string, Color)>();
+            if (items.Count == 0)
+            {
+                items.Add((20, "MA", Color.FromRgb(0xFF, 0xD7, 0x00)));
+            }
+
+            foreach (var (p, t, c) in items)
+            {
+                Lines.Add(new MaLine { Period = Math.Max(1, p), MaType = (t == "EMA") ? "EMA" : "MA", Color = c });
+            }
+
+            MaGrid.ItemsSource = Lines;
+        }
+
+        private void AddRow_Click(object sender, RoutedEventArgs e)
+        {
+            Lines.Add(new MaLine { Period = 20, MaType = "MA", Color = Color.FromRgb(0xFF, 0xD7, 0x00) });
+        }
+
+        private void RemoveRow_Click(object sender, RoutedEventArgs e)
+        {
+            var selected = MaGrid.SelectedItem as MaLine;
+            if (selected != null) Lines.Remove(selected);
+        }
+
+
+        private void PickColor_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is not System.Windows.Controls.Button btn) return;
+            if (btn.DataContext is not MaLine line) return;
+            var dlg = new ColorPickerDialog(line.Color) { Owner = this };
+            if (dlg.ShowDialog() == true)
+                line.Color = dlg.SelectedColor;
         }
 
         private void Ok_Click(object sender, RoutedEventArgs e)
         {
-            if (!int.TryParse(PeriodBox.Text, out var p) || p <= 0) { MessageBox.Show("期間必須為正整數"); return; }
-            Period = p;
-            IsAdd = RbAdd.IsChecked == true;
-            MaType = ((TypeBox.SelectedItem as System.Windows.Controls.ComboBoxItem)?.Content?.ToString() ?? "SMA");
-            DialogResult = true;
-        }
-
-        private void Color_Click(object sender, RoutedEventArgs e)
-        {
-            if (sender is System.Windows.Controls.Button b)
+            var valid = new List<MaLine>();
+            foreach (var ln in Lines)
             {
-                try
+                if (ln.Period <= 0)
                 {
-                    var col = (Color)ColorConverter.ConvertFromString(b.Tag?.ToString() ?? "#FFD700");
-                    LineColor = col;
-                    ColorBox.Text = string.Format("#{0:X2}{1:X2}{2:X2}", col.R, col.G, col.B);
+                    MessageBox.Show("期間必須為正整數");
+                    return;
                 }
-                catch { }
+                valid.Add(ln);
             }
+
+            ResultLines = valid
+                .GroupBy(x => $"{x.MaType}:{x.Period}")
+                .Select(g => g.First())
+                .ToList();
+
+            DialogResult = true;
         }
     }
 }

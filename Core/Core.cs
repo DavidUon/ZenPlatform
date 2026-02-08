@@ -9,6 +9,7 @@ using ZenPlatform.DdePrice;
 using ZenPlatform.LogText;
 using ZenPlatform.MVVM.RulePage;
 using ZenPlatform.SessionManager;
+using ZenPlatform.Trade;
 
 namespace ZenPlatform.Core
 {
@@ -24,6 +25,7 @@ namespace ZenPlatform.Core
         public PriceMonitor PriceMonitor { get; }
         public LogCtrl LogCtrl { get; }
         public LogModel MainLog { get; }
+        public TradeCtrl TradeCtrl { get; }
         public SessionManager.SessionManager[] SessionManagers { get; }
         public SessionPageViewModel[] SessionPages { get; }
         public KChartBridge ChartBridge { get; }
@@ -73,14 +75,17 @@ namespace ZenPlatform.Core
             LogCtrl = new LogCtrl();
             // 目前顯示的主 log 資料來源
             MainLog = new LogModel();
+            // 交易控制 Gate
+            TradeCtrl = new TradeCtrl();
             // 報價/時間轉送到 KChartCore
             ChartBridge = new KChartBridge();
             // 多策略管理器
-            SessionManagers = CreateSessionManagers(10);
+            SessionManagers = CreateSessionManagers(10, TradeCtrl);
             foreach (var manager in SessionManagers)
             {
                 manager.FetchHistoryBars = period => ChartBridge.GetHistoryList(period);
                 manager.RegisterKBarPeriod = period => ChartBridge.RegisterPeriod(period);
+                manager.UnregisterKBarPeriod = period => ChartBridge.UnregisterPeriod(period);
                 manager.IsHistoryReady = () => ChartBridge.HistoryReady;
             }
             SessionManager.SessionStateStore.LoadAll(SessionManagers);
@@ -93,7 +98,7 @@ namespace ZenPlatform.Core
             }
             SessionPages = CreateSessionPages(SessionManagers, Broker, ClientCtrl);
             // Queue 分派中心
-            EventHub = new CoreEventHub(SessionManagers, ChartBridge);
+            EventHub = new CoreEventHub(SessionManagers, ChartBridge, TradeCtrl);
             _priceSwitchCoordinator = new PriceSwitchCoordinator(
                 () => IsBrokerConnected,
                 () => ClientCtrl.LastUserData?.User?.Email,
@@ -268,6 +273,16 @@ namespace ZenPlatform.Core
 
         public void EnqueueQuote(string product, string field, int year, int month, string value, bool isRequest, DateTime time, QuoteSource source)
         {
+            if (!string.IsNullOrWhiteSpace(CurContract) &&
+                ContractYear > 0 &&
+                ContractMonth > 0 &&
+                (!string.Equals(product, CurContract, StringComparison.Ordinal) ||
+                 year != ContractYear ||
+                 month != ContractMonth))
+            {
+                return;
+            }
+
             var update = new QuoteUpdate(
                 product,
                 QuoteFieldMapper.FromChineseName(field),
@@ -522,12 +537,12 @@ namespace ZenPlatform.Core
             return timeValue;
         }
 
-        private static SessionManager.SessionManager[] CreateSessionManagers(int count)
+        private static SessionManager.SessionManager[] CreateSessionManagers(int count, TradeCtrl tradeCtrl)
         {
             var managers = new SessionManager.SessionManager[count];
             for (var i = 0; i < count; i++)
             {
-                var manager = new SessionManager.SessionManager(i);
+                var manager = new SessionManager.SessionManager(i, tradeCtrl);
                 manager.LogRequested += message => manager.Log.Add(message);
                 managers[i] = manager;
             }

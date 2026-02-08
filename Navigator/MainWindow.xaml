@@ -1,0 +1,33 @@
+﻿<Window x:Class="Navigator.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:Navigator"
+        xmlns:charts="clr-namespace:Charts;assembly=Charts"
+        mc:Ignorable="d"
+        Title="MainWindow" Height="450" Width="800" Background="#0F1117">
+    <Grid Background="#0F1117">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <Border Grid.Row="0" Background="#151922" BorderBrush="#2A2F3A" BorderThickness="0,0,0,1" Padding="8">
+            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                <TextBlock Text="年份" Foreground="#C9D1D9" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                <ComboBox x:Name="YearCombo" Width="100" Margin="0,0,12,0"/>
+                <TextBlock Text="月份" Foreground="#C9D1D9" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                <ComboBox x:Name="MonthCombo" Width="80" Margin="0,0,12,0"/>
+                <TextBlock Text="週期" Foreground="#C9D1D9" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                <ComboBox x:Name="PeriodCombo" Width="100" Margin="0,0,12,0"/>
+                <Button x:Name="LoadButton" Content="載入" Padding="12,6"/>
+                <Separator Margin="12,0"/>
+                <Button x:Name="ExportMetaButton" Content="匯出中繼檔" Margin="0,0,6,0" Padding="10,6"/>
+                <Button x:Name="ImportMetaButton" Content="匯入中繼檔" Padding="10,6"/>
+            </StackPanel>
+        </Border>
+
+        <charts:MultiPaneChartView Grid.Row="1" x:Name="ChartView"/>
+    </Grid>
+</Window>

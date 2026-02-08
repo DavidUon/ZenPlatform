@@ -8,6 +8,9 @@
         <SolidColorBrush x:Key="PanelBg" Color="#18181D"/>
         <SolidColorBrush x:Key="InputBg" Color="#202027"/>
         <SolidColorBrush x:Key="BorderDark" Color="#3C3C46"/>
+        <SolidColorBrush x:Key="BrushButtonBackground" Color="#2A2F3A"/>
+        <SolidColorBrush x:Key="BrushButtonBorder" Color="#3C3C46"/>
+        <SolidColorBrush x:Key="BrushText" Color="#E8E8E8"/>
         <Style TargetType="TextBox">
             <Setter Property="Background" Value="{StaticResource InputBg}"/>
             <Setter Property="Foreground" Value="#F0F0F0"/>
@@ -15,19 +18,63 @@
             <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="Padding" Value="6,4"/>
         </Style>
-        <Style TargetType="Button">
-            <Setter Property="Padding" Value="10,6"/>
-            <Setter Property="Background" Value="#333645"/>
-            <Setter Property="Foreground" Value="#FFFFFF"/>
-            <Setter Property="BorderBrush" Value="{StaticResource BorderDark}"/>
+        <Style x:Key="StrategyButtonStyle" TargetType="Button">
+            <Setter Property="Background" Value="{StaticResource BrushButtonBackground}" />
+            <Setter Property="Foreground" Value="{StaticResource BrushText}" />
+            <Setter Property="BorderBrush" Value="{StaticResource BrushButtonBorder}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Padding" Value="8,2" />
+            <Setter Property="MinWidth" Value="80" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="{x:Type Button}">
+                        <Border x:Name="Border"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}">
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"
+                                              Margin="{TemplateBinding Padding}" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Border" Property="Background" Value="#FF787878" />
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Border" Property="Background" Value="#FF606060" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="Border" Property="Opacity" Value="0.5" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="SwatchButtonStyle" TargetType="Button">
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="MinWidth" Value="0"/>
+            <Setter Property="MinHeight" Value="0"/>
+            <Setter Property="BorderBrush" Value="#2A2A33"/>
             <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="FontSize" Value="{DynamicResource ChartFontSizeSm}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="2"/>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
         </Style>
     </Window.Resources>
 
     <Border Background="{StaticResource PanelBg}" CornerRadius="6" Margin="12" Padding="12">
         <Grid>
             <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="Auto"/>
@@ -47,33 +94,31 @@
 
             <TextBlock Text="填充顏色：" Grid.Row="2" Margin="0,0,8,10"/>
             <StackPanel Grid.Row="2" Grid.Column="1" Margin="0,0,0,10" Orientation="Horizontal">
-            <UniformGrid x:Name="ColorPanel" Columns="6" Rows="2">
-                <!-- 12 常用顏色方塊 -->
-                <Button Width="22" Height="22" Margin="2" Background="#64A0FF" Click="Color_Click" Tag="#64A0FF"/>
-                <Button Width="22" Height="22" Margin="2" Background="#FF6B6B" Click="Color_Click" Tag="#FF6B6B"/>
-                <Button Width="22" Height="22" Margin="2" Background="#2ECC71" Click="Color_Click" Tag="#2ECC71"/>
-                <Button Width="22" Height="22" Margin="2" Background="#FFA500" Click="Color_Click" Tag="#FFA500"/>
-                <Button Width="22" Height="22" Margin="2" Background="#9B59B6" Click="Color_Click" Tag="#9B59B6"/>
-                <Button Width="22" Height="22" Margin="2" Background="#1ABC9C" Click="Color_Click" Tag="#1ABC9C"/>
-                <Button Width="22" Height="22" Margin="2" Background="#F1C40F" Click="Color_Click" Tag="#F1C40F"/>
-                <Button Width="22" Height="22" Margin="2" Background="#95A5A6" Click="Color_Click" Tag="#95A5A6"/>
-                <Button Width="22" Height="22" Margin="2" Background="#E91E63" Click="Color_Click" Tag="#E91E63"/>
-                <Button Width="22" Height="22" Margin="2" Background="#00BCD4" Click="Color_Click" Tag="#00BCD4"/>
-                <Button Width="22" Height="22" Margin="2" Background="#CDDC39" Click="Color_Click" Tag="#CDDC39"/>
-                <Button Width="22" Height="22" Margin="2" Background="#FFC107" Click="Color_Click" Tag="#FFC107"/>
-            </UniformGrid>
-            <TextBox x:Name="FillBox" Width="90" Margin="8,0,0,0" IsReadOnly="True"/>
+                <Button x:Name="FillSwatch" Width="36" Height="22" Margin="0,0,8,0"
+                        Click="PickFillColor_Click" Style="{StaticResource SwatchButtonStyle}"/>
             </StackPanel>
 
-            <TextBlock Text="不透明度：" Grid.Row="3" Margin="0,0,8,10"/>
-            <StackPanel Grid.Row="3" Grid.Column="1" Orientation="Horizontal">
+            <TextBlock Text="中線顏色：" Grid.Row="3" Margin="0,0,8,10"/>
+            <StackPanel Grid.Row="3" Grid.Column="1" Margin="0,0,0,10" Orientation="Horizontal">
+                <Button x:Name="MidSwatch" Width="36" Height="22" Margin="0,0,8,0"
+                        Click="PickMidColor_Click" Style="{StaticResource SwatchButtonStyle}"/>
+            </StackPanel>
+
+            <TextBlock Text="上下緣顏色：" Grid.Row="4" Margin="0,0,8,10"/>
+            <StackPanel Grid.Row="4" Grid.Column="1" Margin="0,0,0,10" Orientation="Horizontal">
+                <Button x:Name="EdgeSwatch" Width="36" Height="22" Margin="0,0,8,0"
+                        Click="PickEdgeColor_Click" Style="{StaticResource SwatchButtonStyle}"/>
+            </StackPanel>
+
+            <TextBlock Text="不透明度：" Grid.Row="5" Margin="0,0,8,10"/>
+            <StackPanel Grid.Row="5" Grid.Column="1" Orientation="Horizontal">
                 <Slider x:Name="OpacitySlider" Minimum="0" Maximum="100" Width="160" Value="20"/>
                 <TextBlock x:Name="OpacityText" Margin="8,0,0,0" VerticalAlignment="Center" Text="20%"/>
             </StackPanel>
 
-            <StackPanel Grid.Row="4" Grid.ColumnSpan="2" Orientation="Horizontal" HorizontalAlignment="Right">
-                <Button Width="90" Margin="4" Content="確定" IsDefault="True" Click="Ok_Click"/>
-                <Button Width="90" Margin="4" Content="取消" IsCancel="True"/>
+            <StackPanel Grid.Row="6" Grid.ColumnSpan="2" Orientation="Horizontal" HorizontalAlignment="Right">
+                <Button Width="90" Margin="4" Content="確定" IsDefault="True" Click="Ok_Click" Style="{StaticResource StrategyButtonStyle}"/>
+                <Button Width="90" Margin="4" Content="取消" IsCancel="True" Style="{StaticResource StrategyButtonStyle}"/>
             </StackPanel>
         </Grid>
     </Border>

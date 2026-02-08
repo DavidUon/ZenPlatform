@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Windows.Media;
 
 namespace Charts
@@ -13,6 +14,7 @@ namespace Charts
         public decimal Low { get; set; }
         public decimal Close { get; set; }
         public int Volume { get; set; }
+        public Dictionary<string, decimal> Indicators { get; set; } = new();
 
         /// <summary>
         /// 是否為對齊線K棒 (例如，交易日的開盤第一根)，會觸發繪製特殊的垂直格線
@@ -59,6 +61,7 @@ namespace Charts
         public int Volume { get; set; }
         public KBarTag Tag { get; set; }
         public bool IsNullBar { get; set; } // For floating bar initialization
+        public Dictionary<string, decimal> Indicators { get; private set; } = new();
 
         public GraphKBar() { IsNullBar = true; }
 
@@ -72,6 +75,7 @@ namespace Charts
             Volume = kBar.Volume;
             Tag = kBar.IsAlignmentBar ? KBarTag.xAxisMarkSplit : KBarTag.none;
             IsNullBar = false;
+            Indicators = kBar.Indicators;
         }
     }
 }

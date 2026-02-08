@@ -22,9 +22,9 @@ namespace Charts
 
         private readonly List<KdPoint> _kd = new();
         private readonly Dictionary<GraphKBar, int> _indexMap = new();
-        private readonly Brush _kBrush = new SolidColorBrush(Color.FromRgb(255, 210, 0)); // 黃
-        private readonly Brush _dBrush = new SolidColorBrush(Color.FromRgb(100, 200, 255)); // 淺藍
-        private const double _lineThickness = 1.5;
+        private SolidColorBrush _kBrush = new SolidColorBrush(Color.FromRgb(0xFF, 0xFF, 0x00)); // 黃
+        private SolidColorBrush _dBrush = new SolidColorBrush(Color.FromRgb(100, 200, 255)); // 淺藍
+        private const double _lineThickness = 1.0;
         private double? _prevKX, _prevKY, _prevDX, _prevDY;
         private decimal? _prevKVal, _prevDVal;
         private int _lastKDir = 0, _lastDDir = 0; // 1 up, -1 down, 0 none
@@ -44,10 +44,12 @@ namespace Charts
                 try
                 {
                     var (p, sk, sd) = GetParameters();
-                    var dlg = new KdSettingsDialog(p, sk, sd) { Owner = Window.GetWindow(this) };
+                    var (kc, dc) = GetLineColors();
+                    var dlg = new KdSettingsDialog(p, sk, sd, kc, dc) { Owner = Window.GetWindow(this) };
                     if (dlg.ShowDialog() == true)
                     {
                         SetParameters(dlg.Period, dlg.SmoothK, dlg.SmoothD);
+                        SetLineColors(dlg.KColor, dlg.DColor);
                     }
                 }
                 catch { }
@@ -119,10 +121,13 @@ namespace Charts
 
                 _kd.Add(new KdPoint { Time = bar.Time, K = k, D = d });
                 _indexMap[bar] = i;
+                bar.Indicators["KD_K"] = k;
+                bar.Indicators["KD_D"] = d;
             }
         }
 
         public (int period, int smoothK, int smoothD) GetParameters() => (_period, _smoothK, _smoothD);
+        public (Color kColor, Color dColor) GetLineColors() => (_kBrush.Color, _dBrush.Color);
 
         public void SetParameters(int period, int smoothK, int smoothD)
         {
@@ -130,6 +135,13 @@ namespace Charts
             _smoothK = Math.Max(1, smoothK);
             _smoothD = Math.Max(1, smoothD);
             RecalculateKd();
+        }
+
+        public void SetLineColors(Color kColor, Color dColor)
+        {
+            _kBrush = new SolidColorBrush(kColor);
+            _dBrush = new SolidColorBrush(dColor);
+            ApplyXViewState(_visibleStartIndex, _barSpacing);
         }
 
         protected override void CalculateYAxisRange()

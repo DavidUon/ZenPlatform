@@ -34,6 +34,8 @@ namespace Charts
         private int _estimatedPeriodMinutes = 1; // 估算的當前週期（分鐘）
         private const string ConfigFileName = "charts_config.json";
         private static string GetConfigPath() => System.IO.Path.Combine(AppContext.BaseDirectory, ConfigFileName);
+        private static string ColorToHex(System.Windows.Media.Color c) => string.Format("#{0:X2}{1:X2}{2:X2}", c.R, c.G, c.B);
+        private static System.Windows.Media.Color HexToColor(string hex) => (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(hex);
 
         // 暴露合約變更請求事件
         public event Action? OnContractChgReq;
@@ -601,6 +603,13 @@ namespace Charts
                         if (_paneByType.TryGetValue(IndicatorPanelType.Kd, out var kdPane) && kdPane is KdPane kd)
                         {
                             kd.SetParameters(ic.Period, ic.SmoothK, ic.SmoothD);
+                            if (!string.IsNullOrEmpty(ic.KColorHex) || !string.IsNullOrEmpty(ic.DColorHex))
+                            {
+                                var (curK, curD) = kd.GetLineColors();
+                                var kc = string.IsNullOrEmpty(ic.KColorHex) ? curK : HexToColor(ic.KColorHex!);
+                                var dc = string.IsNullOrEmpty(ic.DColorHex) ? curD : HexToColor(ic.DColorHex!);
+                                kd.SetLineColors(kc, dc);
+                            }
                             if (_historyCache != null && _historyCache.Count > 0)
                             {
                                 kd.LoadHistory(_historyCache);
@@ -614,6 +623,13 @@ namespace Charts
                         if (_paneByType.TryGetValue(IndicatorPanelType.Macd, out var macdPane) && macdPane is MacdPane macd)
                         {
                             macd.SetParameters(ic.EMA1, ic.EMA2, ic.Day);
+                            if (!string.IsNullOrEmpty(ic.DifColorHex) || !string.IsNullOrEmpty(ic.DeaColorHex))
+                            {
+                                var (curDif, curDea) = macd.GetLineColors();
+                                var dif = string.IsNullOrEmpty(ic.DifColorHex) ? curDif : HexToColor(ic.DifColorHex!);
+                                var dea = string.IsNullOrEmpty(ic.DeaColorHex) ? curDea : HexToColor(ic.DeaColorHex!);
+                                macd.SetLineColors(dif, dea);
+                            }
                             if (_historyCache != null && _historyCache.Count > 0)
                             {
                                 macd.LoadHistory(_historyCache);
@@ -671,11 +687,29 @@ namespace Charts
                         break;
                     case KdPane kd:
                         var (period, sk, sd) = kd.GetParameters();
-                        list.Add(new IndicatorConfig { Type = "KD", Period = period, SmoothK = sk, SmoothD = sd });
+                        var (kc, dc) = kd.GetLineColors();
+                        list.Add(new IndicatorConfig
+                        {
+                            Type = "KD",
+                            Period = period,
+                            SmoothK = sk,
+                            SmoothD = sd,
+                            KColorHex = ColorToHex(kc),
+                            DColorHex = ColorToHex(dc)
+                        });
                         break;
                     case MacdPane macd:
                         var (e1, e2, day) = macd.GetParameters();
-                        list.Add(new IndicatorConfig { Type = "MACD", EMA1 = e1, EMA2 = e2, Day = day });
+                        var (difC, deaC) = macd.GetLineColors();
+                        list.Add(new IndicatorConfig
+                        {
+                            Type = "MACD",
+                            EMA1 = e1,
+                            EMA2 = e2,
+                            Day = day,
+                            DifColorHex = ColorToHex(difC),
+                            DeaColorHex = ColorToHex(deaC)
+                        });
                         break;
                 }
             }
@@ -702,11 +736,16 @@ namespace Charts
         }
 
         // KD 參數設定入口
-        public void SetKdParameters(int period, int smoothK, int smoothD)
+        public void SetKdParameters(int period, int smoothK, int smoothD, System.Windows.Media.Color? kColor = null, System.Windows.Media.Color? dColor = null)
         {
             if (_paneByType.TryGetValue(IndicatorPanelType.Kd, out var pane) && pane is KdPane kd)
             {
                 kd.SetParameters(period, smoothK, smoothD);
+                if (kColor.HasValue || dColor.HasValue)
+                {
+                    var (curK, curD) = kd.GetLineColors();
+                    kd.SetLineColors(kColor ?? curK, dColor ?? curD);
+                }
                 // 使用快取資料重載，並保持 X 視圖對齊
                 if (_historyCache != null && _historyCache.Count > 0)
                 {
@@ -741,11 +780,12 @@ namespace Charts
                         AddIndicatorPanel(IndicatorPanelType.Kd);
                     var kdPane = (KdPane)_paneByType[IndicatorPanelType.Kd];
                     var (p, sk, sd) = kdPane.GetParameters();
-                    var dlg = new KdSettingsDialog(p, sk, sd) { Owner = owner };
+                    var (kc, dc) = kdPane.GetLineColors();
+                    var dlg = new KdSettingsDialog(p, sk, sd, kc, dc) { Owner = owner };
                     var ok = dlg.ShowDialog() == true;
                     if (ok)
                     {
-                        SetKdParameters(dlg.Period, dlg.SmoothK, dlg.SmoothD);
+                        SetKdParameters(dlg.Period, dlg.SmoothK, dlg.SmoothD, dlg.KColor, dlg.DColor);
                     }
                     return ok;
                 case IndicatorPanelType.Macd:
@@ -753,11 +793,13 @@ namespace Charts
                         AddIndicatorPanel(IndicatorPanelType.Macd);
                     var macdPane = (MacdPane)_paneByType[IndicatorPanelType.Macd];
                     var (f, s, si) = macdPane.GetParameters();
-                    var dlgM = new MacdSettingsDialog(f, s, si) { Owner = owner };
+                    var (difC, deaC) = macdPane.GetLineColors();
+                    var dlgM = new MacdSettingsDialog(f, s, si, difC, deaC) { Owner = owner };
                     var okM = dlgM.ShowDialog() == true;
                     if (okM)
                     {
                         SetMacdParameters(dlgM.Ema1, dlgM.Ema2, dlgM.Day);
+                        macdPane.SetLineColors(dlgM.DifColor, dlgM.DeaColor);
                     }
                     return okM;
                 default:
@@ -769,8 +811,17 @@ namespace Charts
         // Overlay: Bollinger
         public void AddBollingerOverlay(int period = 20, double k = 2.0, System.Windows.Media.Color? fillColor = null, double opacity = 0.2)
         {
-            var bb = fillColor.HasValue ? new BollingerOverlay(period, k, fillColor.Value, opacity) : new BollingerOverlay(period, k);
-            _mainPricePane.AddOverlay(bb);
+            if (fillColor.HasValue)
+            {
+                var mid = System.Windows.Media.Color.FromRgb(0xD7, 0xD4, 0xD5);
+                var bb = new BollingerOverlay(period, k, fillColor.Value, opacity, fillColor.Value, mid);
+                _mainPricePane.AddOverlay(bb);
+            }
+            else
+            {
+                var bb = new BollingerOverlay(period, k);
+                _mainPricePane.AddOverlay(bb);
+            }
         }
 
         public void RemoveBollingerOverlay()
@@ -782,7 +833,10 @@ namespace Charts
         public bool SetOverlayPara_Bollinger(Window? owner = null)
         {
             // 讀取目前的 BB 參數（若沒有則使用預設）
-            int defPeriod = 20; double defK = 2.0; System.Windows.Media.Color defFill = System.Windows.Media.Color.FromRgb(0x64,0xA0,0xFF); double defOpacity = 0.2;
+            int defPeriod = 20; double defK = 2.0; System.Windows.Media.Color defFill = System.Windows.Media.Color.FromRgb(0xB7,0xB8,0xB7);
+            System.Windows.Media.Color defEdge = System.Windows.Media.Color.FromRgb(0xB4,0xB4,0xB4);
+            System.Windows.Media.Color defMid = System.Windows.Media.Color.FromRgb(0xD7,0xD4,0xD5);
+            double defOpacity = 0.059597315436241624;
             try
             {
                 var curr = _mainPricePane.GetOverlayConfigs().FirstOrDefault(o => o.Type == "BOLL");
@@ -795,18 +849,78 @@ namespace Charts
                         var col = (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(curr.FillHex!);
                         defFill = col;
                     }
+                    if (!string.IsNullOrEmpty(curr.EdgeColorHex))
+                    {
+                        var col = (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(curr.EdgeColorHex!);
+                        defEdge = col;
+                    }
+                    if (!string.IsNullOrEmpty(curr.MidColorHex))
+                    {
+                        var col = (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(curr.MidColorHex!);
+                        defMid = col;
+                    }
                     if (curr.Opacity >= 0 && curr.Opacity <= 1) defOpacity = curr.Opacity;
                 }
             }
             catch { }
 
-            var dlg = new BollSettingsDialog(defPeriod, defK, defFill, defOpacity) { Owner = owner };
+            var dlg = new BollSettingsDialog(defPeriod, defK, defFill, defEdge, defMid, defOpacity) { Owner = owner };
             var ok = dlg.ShowDialog() == true;
             if (ok)
             {
                 // 移除舊的 BB（以 TagName 判斷）再加新的
                 _mainPricePane.RemoveOverlaysByTag("布林通道");
-                AddBollingerOverlay(dlg.Period, dlg.K, dlg.FillColor, dlg.FillOpacity);
+                _mainPricePane.AddOverlay(new BollingerOverlay(dlg.Period, dlg.K, dlg.FillColor, dlg.FillOpacity, dlg.EdgeColor, dlg.MidColor));
+            }
+            return ok;
+        }
+
+        // Overlay: BBI (Bull and Bear Index)
+        public void AddBbiOverlay(System.Windows.Media.Color? color = null)
+        {
+            var bbi = color.HasValue ? new BbiOverlay(new[] { 3, 6, 12, 24 }, color.Value) : new BbiOverlay();
+            _mainPricePane.AddOverlay(bbi);
+        }
+
+        public void RemoveBbiOverlay()
+        {
+            _mainPricePane.RemoveOverlaysByTag("BBI");
+            _mainPricePane.RemoveOverlayTag("BBI");
+        }
+
+        public bool SetOverlayPara_Bbi(Window? owner = null)
+        {
+            int[] defPeriods = new[] { 3, 6, 12, 24 };
+            System.Windows.Media.Color defColor = System.Windows.Media.Color.FromRgb(0xFF, 0x8C, 0x00);
+            try
+            {
+                var curr = _mainPricePane.GetOverlayConfigs().FirstOrDefault(o => o.Type == "BBI");
+                if (curr != null)
+                {
+                    if (!string.IsNullOrWhiteSpace(curr.BbiPeriodsCsv))
+                    {
+                        var parts = curr.BbiPeriodsCsv.Split(new[] { ',', ' ', ';', '|' }, StringSplitOptions.RemoveEmptyEntries);
+                        var list = new List<int>();
+                        foreach (var p in parts)
+                        {
+                            if (int.TryParse(p, out var v) && v > 0) list.Add(v);
+                        }
+                        if (list.Count > 0) defPeriods = list.ToArray();
+                    }
+                    if (!string.IsNullOrEmpty(curr.ColorHex))
+                    {
+                        defColor = (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(curr.ColorHex!);
+                    }
+                }
+            }
+            catch { }
+
+            var dlg = new BbiSettingsDialog(defPeriods, defColor) { Owner = owner };
+            var ok = dlg.ShowDialog() == true;
+            if (ok)
+            {
+                _mainPricePane.RemoveOverlaysByTag("BBI");
+                _mainPricePane.AddOverlay(new BbiOverlay(dlg.Periods, dlg.LineColor));
             }
             return ok;
         }
@@ -840,14 +954,32 @@ namespace Charts
 
         public bool SetOverlayPara_Ma(Window? owner = null)
         {
-            var dlg = new MaSettingsDialog(20, "SMA") { Owner = owner };
+            var cfgs = _mainPricePane.GetOverlayConfigs().Where(c => c.Type == "MA").ToList();
+            var defaults = new List<(int period, string maType, System.Windows.Media.Color color)>();
+            if (cfgs.Count == 0)
+            {
+                defaults.Add((144, "SMA", System.Windows.Media.Color.FromRgb(0xFF, 0xD7, 0x00)));
+            }
+            else
+            {
+                foreach (var c in cfgs)
+                {
+                    var col = string.IsNullOrEmpty(c.ColorHex)
+                        ? System.Windows.Media.Color.FromRgb(0xFF, 0xD7, 0x00)
+                        : (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(c.ColorHex!);
+                    defaults.Add((Math.Max(1, c.Period), c.MaType ?? "MA", col));
+                }
+            }
+
+            var dlg = new MaSettingsDialog(defaults) { Owner = owner };
             var ok = dlg.ShowDialog() == true;
             if (ok)
             {
-                if (dlg.IsAdd)
-                    AddMaOverlay(dlg.Period, dlg.MaType, dlg.LineColor);
-                else
-                    RemoveMaOverlayByPeriod(dlg.Period);
+                _mainPricePane.RemoveOverlaysByTag("均線");
+                foreach (var ln in dlg.ResultLines)
+                {
+                    _mainPricePane.AddOverlay(new MaOverlay(ln.Period, ln.MaType, ln.Color));
+                }
             }
             return ok;
         }

@@ -261,6 +261,65 @@ namespace ZenPlatform.SessionManager.Backtest
             return (min, max);
         }
 
+        public DateTime? FindPreloadStartByTime(int product, DateTime start, int preloadDays)
+        {
+            if (preloadDays <= 0)
+            {
+                return null;
+            }
+
+            var targetTime = start.ToString("HH:mm");
+            var remaining = preloadDays;
+            var matches = new List<DateTime>(preloadDays);
+            var startTs = ToUnixSeconds(start);
+
+            for (var year = start.Year; year >= 1990 && remaining > 0; year--)
+            {
+                var dbPath = Path.Combine(_dbFolder, $"歷史價格資料庫.{year}.db");
+                if (!File.Exists(dbPath))
+                {
+                    continue;
+                }
+
+                using var connection = new SqliteConnection($"Data Source={dbPath}");
+                connection.Open();
+                using var cmd = connection.CreateCommand();
+                cmd.CommandText = @"
+SELECT ts
+FROM bars_1m
+WHERE product = @product
+  AND ts < @end
+  AND strftime('%H:%M', datetime(ts, 'unixepoch', '+8 hours')) = @time
+ORDER BY ts DESC
+LIMIT @limit;".Trim();
+
+                cmd.Parameters.AddWithValue("@product", product);
+                cmd.Parameters.AddWithValue("@end", year == start.Year ? startTs : long.MaxValue);
+                cmd.Parameters.AddWithValue("@time", targetTime);
+                cmd.Parameters.AddWithValue("@limit", remaining);
+
+                using var reader = cmd.ExecuteReader();
+                while (reader.Read())
+                {
+                    var ts = reader.GetInt64(0);
+                    matches.Add(FromUnixSeconds(ts));
+                    remaining--;
+                    if (remaining == 0)
+                    {
+                        break;
+                    }
+                }
+            }
+
+            if (matches.Count < preloadDays)
+            {
+                return null;
+            }
+
+            // matches are collected in descending order.
+            return matches[preloadDays - 1];
+        }
+
         public long CountBars1m(int product, DateTime start, DateTime end)
         {
             if (start > end)

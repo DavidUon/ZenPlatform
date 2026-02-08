@@ -147,6 +147,7 @@ namespace TaifexHisDbManager
                 Title = "選擇歷史資料區間";
                 ImportModePanel.Visibility = Visibility.Collapsed;
                 RangeModePanel.Visibility = Visibility.Visible;
+                BacktestActionPanel.Visibility = Visibility.Visible;
                 LoadRangeSettings();
                 SelectYearTabForRangeStart();
             }
@@ -155,6 +156,8 @@ namespace TaifexHisDbManager
                 Title = "歷史資料庫維護";
                 ImportModePanel.Visibility = Visibility.Visible;
                 RangeModePanel.Visibility = Visibility.Collapsed;
+                BacktestActionPanel.Visibility = Visibility.Collapsed;
+                SelectLastYearTab();
             }
         }
 
@@ -162,6 +165,8 @@ namespace TaifexHisDbManager
         {
             _loadedYears.Clear();
             BuildTabs();
+            if (_mode == ValidationMode.Import)
+                SelectLastYearTab();
         }
 
         private void SelectYearTabForRangeStart()
@@ -179,6 +184,14 @@ namespace TaifexHisDbManager
                     break;
                 }
             }
+        }
+
+        private void SelectLastYearTab()
+        {
+            if (YearTabs.Items.Count == 0)
+                return;
+
+            YearTabs.SelectedIndex = YearTabs.Items.Count - 1;
         }
 
         private void OnStartBacktest(object sender, RoutedEventArgs e)

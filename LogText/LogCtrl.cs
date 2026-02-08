@@ -4,17 +4,27 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Documents;
 using System.Windows.Media;
+using System.Collections.Concurrent;
+using System.Windows.Threading;
+using ZenPlatform.Utility;
 
 namespace ZenPlatform.LogText
 {
     public class LogCtrl
     {
         private const int DefaultMaxLines = 5000;
+        private const int FlushIntervalMs = 1000;
+        private const int MaxBatchSize = 200;
+        private const int MaxUiLines = 5000;
         private RichTextBox? _target;
         private DateTime _currentTime = DateTime.Now;
         private LogModel? _model;
         private DateTime? _lastEntryTime;
         private string? _lastEntryText;
+        private readonly ConcurrentQueue<LogEntry> _pending = new();
+        private DispatcherTimer? _flushTimer;
+        private bool _suspendRendering;
+        private bool _consoleOnly;
 
         public void SetTarget(RichTextBox target)
         {
@@ -25,6 +35,28 @@ namespace ZenPlatform.LogText
             _lastEntryTime = null;
             _lastEntryText = null;
             _target.Document.PageWidth = 8192;
+            EnsureTimer();
+        }
+
+        public bool TryGetTargetScreenRect(out Rect rect)
+        {
+            rect = default;
+            if (_target == null)
+            {
+                return false;
+            }
+
+            if (!_target.Dispatcher.CheckAccess())
+            {
+                return false;
+            }
+
+            var topLeft = _target.PointToScreen(new Point(0, 0));
+            var dpi = VisualTreeHelper.GetDpi(_target);
+            var width = _target.ActualWidth * dpi.DpiScaleX;
+            var height = _target.ActualHeight * dpi.DpiScaleY;
+            rect = new Rect(topLeft.X, topLeft.Y, width, height);
+            return true;
         }
 
         public void SetModel(LogModel model)
@@ -32,11 +64,28 @@ namespace ZenPlatform.LogText
             if (_model != null)
             {
                 _model.Changed -= OnModelChanged;
+                _model.EntryAdded -= OnEntryAdded;
             }
 
             _model = model;
             _model.Changed += OnModelChanged;
+            _model.EntryAdded += OnEntryAdded;
             Replay();
+        }
+
+        public void SetRenderSuspended(bool suspended)
+        {
+            _suspendRendering = suspended;
+            if (!suspended)
+            {
+                Replay();
+            }
+        }
+
+        public void SetConsoleOnly(bool enabled)
+        {
+            _consoleOnly = enabled;
+            SetRenderSuspended(enabled);
         }
 
         public void Clear()
@@ -82,9 +131,11 @@ namespace ZenPlatform.LogText
                 return;
             }
 
-            if (_target.Dispatcher.CheckAccess())
+            var snapshot = _model.GetSnapshot();
+            if (snapshot.Length == 0)
             {
-                if (_model.Entries.Count == 0)
+                while (_pending.TryDequeue(out _)) { }
+                if (_target.Dispatcher.CheckAccess())
                 {
                     _target.Document.Blocks.Clear();
                     _lastEntryTime = null;
@@ -92,25 +143,39 @@ namespace ZenPlatform.LogText
                 }
                 else
                 {
-                    AppendLine(_model.Entries[^1]);
+                    _target.Dispatcher.BeginInvoke(new Action(() =>
+                    {
+                        _target.Document.Blocks.Clear();
+                        _lastEntryTime = null;
+                        _lastEntryText = null;
+                    }));
                 }
                 return;
             }
-
-            _target.Dispatcher.BeginInvoke(new Action(() =>
+            // If model was trimmed/replaced, rebuild UI.
+            if (_target.Dispatcher.CheckAccess())
             {
-                if (_model.Entries.Count == 0)
-                {
-                    _target.Document.Blocks.Clear();
-                    _lastEntryTime = null;
-                    _lastEntryText = null;
-                }
-                else
-                {
-                    AppendLine(_model.Entries[^1]);
-                }
-            }));
+                ReplaySnapshot(snapshot);
+            }
+            else
+            {
+                _target.Dispatcher.BeginInvoke(new Action(() => ReplaySnapshot(snapshot)));
+            }
         }
+
+        private void ApplySnapshot(LogEntry[] entries)
+        {
+            if (entries.Length == 0)
+            {
+                _target?.Document.Blocks.Clear();
+                _lastEntryTime = null;
+                _lastEntryText = null;
+                return;
+            }
+
+            ReplaySnapshot(entries);
+        }
+
 
         private void Replay()
         {
@@ -121,23 +186,102 @@ namespace ZenPlatform.LogText
 
             if (_target.Dispatcher.CheckAccess())
             {
-                var entries = _model.Entries.ToArray();
-                _target.Document.Blocks.Clear();
-                _lastEntryTime = null;
-                _lastEntryText = null;
-                _target.BeginChange();
-                var paragraph = new Paragraph { Margin = new Thickness(0) };
-                foreach (var entry in entries)
-                {
-                    AppendLineFast(paragraph, entry);
-                }
-                _target.Document.Blocks.Add(paragraph);
-                _target.EndChange();
-                _target.ScrollToEnd();
+                ReplaySnapshot(_model.GetSnapshot());
                 return;
             }
 
             _target.Dispatcher.BeginInvoke(new Action(Replay));
+        }
+
+        private void ReplaySnapshot(LogEntry[] entries)
+        {
+            if (_target == null)
+            {
+                return;
+            }
+
+            _target.Document.Blocks.Clear();
+            _lastEntryTime = null;
+            _lastEntryText = null;
+            while (_pending.TryDequeue(out _)) { }
+            _target.BeginChange();
+            var paragraph = new Paragraph { Margin = new Thickness(0) };
+            foreach (var entry in entries)
+            {
+                AppendLineFast(paragraph, entry);
+            }
+            _target.Document.Blocks.Add(paragraph);
+            _target.EndChange();
+            _target.ScrollToEnd();
+        }
+
+        private void EnsureTimer()
+        {
+            if (_flushTimer != null)
+            {
+                return;
+            }
+
+            _flushTimer = new DispatcherTimer
+            {
+                Interval = TimeSpan.FromMilliseconds(FlushIntervalMs)
+            };
+            _flushTimer.Tick += (_, __) => FlushPending();
+            _flushTimer.Start();
+        }
+
+        private void FlushPending()
+        {
+            if (_target == null)
+            {
+                return;
+            }
+
+            if (_suspendRendering)
+            {
+                return;
+            }
+
+            if (_pending.IsEmpty)
+            {
+                return;
+            }
+
+            var count = 0;
+            _target.BeginChange();
+            while (count < MaxBatchSize && _pending.TryDequeue(out var entry))
+            {
+                AppendLine(entry);
+                count++;
+            }
+            _target.EndChange();
+
+            TrimUiLines();
+        }
+
+        private void OnEntryAdded(LogEntry entry)
+        {
+            if (_consoleOnly && ConsoleLog.Enabled)
+            {
+                ConsoleLog.WriteLine($"{entry.Text}   {entry.Time:MM/dd HH:mm:ss}");
+                return;
+            }
+
+            _pending.Enqueue(entry);
+            EnsureTimer();
+        }
+
+        private void TrimUiLines()
+        {
+            if (_target == null)
+            {
+                return;
+            }
+
+            while (_target.Document.Blocks.Count > MaxUiLines)
+            {
+                _target.Document.Blocks.Remove(_target.Document.Blocks.FirstBlock);
+            }
         }
 
         private void AppendLine(LogEntry entry)

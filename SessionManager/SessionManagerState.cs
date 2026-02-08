@@ -29,7 +29,7 @@ namespace ZenPlatform.SessionManager
         public decimal RealizedProfit { get; set; }
         public int TradeCount { get; set; }
 
-        public static SessionState FromSession(ISession session)
+        public static SessionState FromSession(Session session)
         {
             return new SessionState
             {
@@ -47,11 +47,10 @@ namespace ZenPlatform.SessionManager
 
         public Session ToSession()
         {
-            return new Session
+            var session = new Session
             {
                 Id = Id,
                 StartTime = StartTime,
-                IsFinished = IsFinished,
                 Position = Position,
                 StartPosition = StartPosition,
                 AvgEntryPrice = AvgEntryPrice,
@@ -59,6 +58,15 @@ namespace ZenPlatform.SessionManager
                 RealizedProfit = RealizedProfit,
                 TradeCount = TradeCount
             };
+            session.PositionManager.FromSnapshot(new ZenPlatform.Strategy.PositionSnapshot
+            {
+                TotalKou = Position,
+                AvgEntryPrice = AvgEntryPrice,
+                PingProfit = RealizedProfit,
+                FloatProfit = FloatProfit
+            });
+            session.RestoreFinished(IsFinished);
+            return session;
         }
     }
 

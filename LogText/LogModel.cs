@@ -1,10 +1,10 @@
 using System;
 using System.Collections.Generic;
-
 namespace ZenPlatform.LogText
 {
     public class LogModel
     {
+        private readonly object _sync = new();
         private readonly List<LogEntry> _entries = new();
         private DateTime _currentTime = DateTime.Now;
         private bool _hasManualTime;
@@ -14,40 +14,54 @@ namespace ZenPlatform.LogText
         public IReadOnlyList<LogEntry> Entries => _entries;
 
         public event Action? Changed;
+        public event Action<LogEntry>? EntryAdded;
 
         public void Add(string text)
         {
             var resolvedTime = _hasManualTime ? _currentTime : DateTime.Now;
             var entry = new LogEntry(resolvedTime, text ?? string.Empty);
-            _entries.Add(entry);
-            TrimIfNeeded();
-            Changed?.Invoke();
+            lock (_sync)
+            {
+                _entries.Add(entry);
+                TrimIfNeededLocked();
+            }
+            EntryAdded?.Invoke(entry);
         }
 
         public void AddAt(DateTime time, string text)
         {
             var entry = new LogEntry(time, text ?? string.Empty);
-            _entries.Add(entry);
-            TrimIfNeeded();
-            Changed?.Invoke();
+            lock (_sync)
+            {
+                _entries.Add(entry);
+                TrimIfNeededLocked();
+            }
+            EntryAdded?.Invoke(entry);
         }
 
         public void Add(string text, string highlightText, LogTxtColor highlightColor)
         {
             var resolvedTime = _hasManualTime ? _currentTime : DateTime.Now;
             var entry = new LogEntry(resolvedTime, text ?? string.Empty, highlightText, highlightColor);
-            _entries.Add(entry);
-            TrimIfNeeded();
-            Changed?.Invoke();
+            lock (_sync)
+            {
+                _entries.Add(entry);
+                TrimIfNeededLocked();
+            }
+            EntryAdded?.Invoke(entry);
         }
 
         public void AddAt(DateTime time, string text, string highlightText, LogTxtColor highlightColor)
         {
             var entry = new LogEntry(time, text ?? string.Empty, highlightText, highlightColor);
-            _entries.Add(entry);
-            TrimIfNeeded();
-            Changed?.Invoke();
+            lock (_sync)
+            {
+                _entries.Add(entry);
+                TrimIfNeededLocked();
+            }
+            EntryAdded?.Invoke(entry);
         }
+
 
         public void SetCurrentTime(DateTime time)
         {
@@ -62,34 +76,50 @@ namespace ZenPlatform.LogText
 
         public void Clear()
         {
-            if (_entries.Count == 0)
+            lock (_sync)
             {
-                return;
+                if (_entries.Count == 0)
+                {
+                    return;
+                }
+                _entries.Clear();
             }
-
-            _entries.Clear();
             Changed?.Invoke();
         }
 
         public void SetMaxLines(int maxLines)
         {
             MaxLines = maxLines;
-            TrimIfNeeded();
+            lock (_sync)
+            {
+                TrimIfNeededLocked();
+            }
             Changed?.Invoke();
         }
 
         public void LoadEntries(IEnumerable<LogEntry> entries)
         {
-            _entries.Clear();
-            foreach (var entry in entries)
+            lock (_sync)
             {
-                _entries.Add(entry);
+                _entries.Clear();
+                foreach (var entry in entries)
+                {
+                    _entries.Add(entry);
+                }
+                TrimIfNeededLocked();
             }
-            TrimIfNeeded();
             Changed?.Invoke();
         }
 
-        private void TrimIfNeeded()
+        public LogEntry[] GetSnapshot()
+        {
+            lock (_sync)
+            {
+                return _entries.ToArray();
+            }
+        }
+
+        private void TrimIfNeededLocked()
         {
             if (MaxLines <= 0)
             {

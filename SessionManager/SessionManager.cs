@@ -1,6 +1,6 @@
 using System.Collections.Generic;
 using ZenPlatform.Core;
-using ZenPlatform.Debug;
+using ZenPlatform.Trade;
 using IndicatorsNamespace = ZenPlatform.Indicators;
 using ZenPlatform.Strategy;
 
@@ -8,17 +8,16 @@ namespace ZenPlatform.SessionManager
 {
     public sealed class SessionManager : System.ComponentModel.INotifyPropertyChanged
     {
-        public SessionManager(int index)
+        public SessionManager(int index, TradeCtrl tradeCtrl)
         {
             Index = index;
+            _tradeCtrl = tradeCtrl ?? throw new System.ArgumentNullException(nameof(tradeCtrl));
             Log = new ZenPlatform.LogText.LogModel();
-            Sessions = new System.Collections.ObjectModel.ObservableCollection<ISession>();
+            Sessions = new System.Collections.ObjectModel.ObservableCollection<Session>();
             IsRealTrade = false;
-            Entry = new SessionEntry();
         }
 
         public int Index { get; }
-        public ISessionEntry Entry { get; }
         public bool AcceptSecondTicks { get; set; } = true;
         public bool AcceptPriceTicks { get; set; } = true;
         public List<double> ColumnWidths { get; } = new();
@@ -26,6 +25,7 @@ namespace ZenPlatform.SessionManager
         public IndicatorsNamespace.Indicators? Indicators { get; private set; }
         public Func<int, List<KChartCore.FunctionKBar>>? FetchHistoryBars { get; set; }
         public Action<int>? RegisterKBarPeriod { get; set; }
+        public Action<int>? UnregisterKBarPeriod { get; set; }
         public Func<bool>? IsHistoryReady { get; set; }
         public DateTime? LastIndicatorBarCloseTime { get; internal set; }
         public bool SuppressIndicatorLog { get; set; }
@@ -83,15 +83,22 @@ namespace ZenPlatform.SessionManager
             }
         }
         public ZenPlatform.LogText.LogModel Log { get; }
-        public System.Collections.ObjectModel.ObservableCollection<ISession> Sessions { get; }
+        public System.Collections.ObjectModel.ObservableCollection<Session> Sessions { get; }
         public DateTime CurrentTime { get; private set; }
+        public DateTime? StrategyStartTime { get; set; }
         private bool _isStrategyRunning;
         private bool _isRealTrade;
-        private readonly Dictionary<QuoteField, string> _latestQuotes = new();
+        private readonly TradeCtrl _tradeCtrl;
+        public decimal? Bid { get; private set; }
+        public decimal? Ask { get; private set; }
+        public decimal? CurPrice { get; private set; }
+        public int? Volume { get; private set; }
+        public DateTime? LastQuoteTime { get; private set; }
         private bool _pendingLogReset;
         private int _sessionIdSeed;
         private DateTime? _lastMinuteStamp;
         private readonly object _rebuildLock = new();
+        private readonly HashSet<int> _kbarPeriods = new();
         private const string IndicatorPendingText = "(計算中....)";
 
         public bool IsStrategyRunning
@@ -117,12 +124,16 @@ namespace ZenPlatform.SessionManager
         }
 
         public event System.Action<string>? LogRequested;
+        public event System.Action<bool>? BacktestStopped;
 
-        public DateTime? LastQuoteTime { get; private set; }
-
-        public bool TryGetLatestQuote(QuoteField field, out string value)
+        public decimal? SendOrder(bool isBuy, int qty)
         {
-            return _latestQuotes.TryGetValue(field, out value!);
+            if (qty <= 0)
+            {
+                return null;
+            }
+
+            return _tradeCtrl.SendOrder(isBuy, qty, IsRealTrade);
         }
 
         public SessionManagerState ExportState()
@@ -196,6 +207,7 @@ namespace ZenPlatform.SessionManager
             foreach (var sessionState in state.Sessions)
             {
                 var session = sessionState.ToSession();
+                session.Manager = this;
                 Sessions.Add(session);
                 if (session.Id > maxId)
                 {
@@ -212,13 +224,13 @@ namespace ZenPlatform.SessionManager
             Log.LoadEntries(entries);
         }
 
-        public ISession? AddSession()
+        public Session? AddSession()
         {
-            var session = Entry.CreateSession(++_sessionIdSeed);
-            if (session == null)
+            var session = new Session
             {
-                return null;
-            }
+                Id = ++_sessionIdSeed,
+                Manager = this
+            };
 
             Sessions.Add(session);
             return session;
@@ -231,8 +243,51 @@ namespace ZenPlatform.SessionManager
                 throw new System.ArgumentNullException(nameof(quote));
             }
 
-            _latestQuotes[quote.Field] = quote.Value;
+            switch (quote.Field)
+            {
+                case QuoteField.Bid:
+                    if (decimal.TryParse(quote.Value, out var bid))
+                    {
+                        Bid = bid;
+                    }
+                    break;
+                case QuoteField.Ask:
+                    if (decimal.TryParse(quote.Value, out var ask))
+                    {
+                        Ask = ask;
+                    }
+                    break;
+                case QuoteField.Last:
+                    if (decimal.TryParse(quote.Value, out var last))
+                    {
+                        CurPrice = last;
+                    }
+                    break;
+                case QuoteField.Volume:
+                    if (int.TryParse(quote.Value, out var volume))
+                    {
+                        Volume = volume;
+                    }
+                    break;
+            }
+
             LastQuoteTime = quote.Time;
+
+            if (Sessions.Count == 0)
+            {
+                return;
+            }
+
+            if (IsBacktestActive && StrategyStartTime.HasValue && CurrentTime < StrategyStartTime.Value)
+            {
+                return;
+            }
+
+            var snapshot = new List<Session>(Sessions);
+            foreach (var session in snapshot)
+            {
+                session.OnTick();
+            }
         }
 
         public void RaiseRenameClicked()
@@ -258,7 +313,37 @@ namespace ZenPlatform.SessionManager
 
         public void OnMinute(DateTime time)
         {
-            // placeholder for minute-based strategy ticks
+            Log.SetCurrentTime(time);
+            Log.Add($"[M{Index + 1}] OnMinute {time:MM/dd HH:mm:ss}");
+            if (Sessions.Count == 0)
+            {
+                return;
+            }
+
+            if (IsBacktestActive && StrategyStartTime.HasValue && time < StrategyStartTime.Value)
+            {
+                return;
+            }
+
+            var snapshot = new List<Session>(Sessions);
+            foreach (var session in snapshot)
+            {
+                session.OnMinute();
+            }
+        }
+
+        public void OnKBarCompleted(int period, KChartCore.FunctionKBar bar)
+        {
+            if (!IsKBarPeriodRegistered(period) || Sessions.Count == 0)
+            {
+                return;
+            }
+
+            var snapshot = new List<Session>(Sessions);
+            foreach (var session in snapshot)
+            {
+                session.OnKBarCompleted(period, bar);
+            }
         }
 
         public string StrategyButtonText => IsStrategyRunning ? "策略結束" : "策略開始";
@@ -276,6 +361,7 @@ namespace ZenPlatform.SessionManager
             }
             else
             {
+                UnregisterAllStrategyKBarPeriods();
                 Log.Add("==== 策略結束 ====");
             }
             OnPropertyChanged(nameof(StrategyButtonText));
@@ -289,11 +375,13 @@ namespace ZenPlatform.SessionManager
             }
 
             IsStrategyRunning = false;
+            UnregisterAllStrategyKBarPeriods();
             OnPropertyChanged(nameof(StrategyButtonText));
         }
 
         private void RuleStartInit()
         {
+            RegisterStrategyKBarPeriod(RuleSet.KbarPeriod);
             RebuildIndicators(force: true);
         }
 
@@ -335,7 +423,10 @@ namespace ZenPlatform.SessionManager
                     Indicators.KD.SetParameter(RuleSet.KPeriod, RuleSet.DPeriod, RuleSet.RsvPeriod);
                     Indicators.MACD.SetParameter(12, 26, 9);
                     LastIndicatorBarCloseTime = null;
-                    RegisterKBarPeriod?.Invoke(RuleSet.KbarPeriod);
+                    if (IsStrategyRunning)
+                    {
+                        RegisterStrategyKBarPeriod(RuleSet.KbarPeriod);
+                    }
 
                     var seenCloseTimes = new HashSet<DateTime>();
                     var recentLogs = new Queue<string>(10);
@@ -368,13 +459,10 @@ namespace ZenPlatform.SessionManager
                     IndicatorsReadyForLog = true;
                     if (recentLogs.Count > 0)
                     {
-                        DebugBus.Send($"[M{Index + 1}] ==== 重算指標(最後10) ====", "指標");
                         foreach (var line in recentLogs)
                         {
-                            DebugBus.Send($"[M{Index + 1}] {line}", "指標");
                         }
                     }
-                    DebugBus.Send($"[M{Index + 1}] {BuildIndicatorSnapshot()}", "指標");
                 }
             }
         }
@@ -466,6 +554,44 @@ namespace ZenPlatform.SessionManager
             }
             Log.Add(IndicatorPendingText);
         }
+
+        public void RegisterStrategyKBarPeriod(int period)
+        {
+            if (period <= 0)
+            {
+                return;
+            }
+
+            if (_kbarPeriods.Add(period))
+            {
+                if (IsStrategyRunning || IsBacktestActive)
+                {
+                    RegisterKBarPeriod?.Invoke(period);
+                }
+            }
+        }
+
+        public void UnregisterAllStrategyKBarPeriods()
+        {
+            if (_kbarPeriods.Count == 0)
+            {
+                return;
+            }
+
+            foreach (var period in _kbarPeriods)
+            {
+                UnregisterKBarPeriod?.Invoke(period);
+            }
+            _kbarPeriods.Clear();
+        }
+
+        public bool IsKBarPeriodRegistered(int period) => _kbarPeriods.Contains(period);
+
+        internal void RaiseBacktestStopped(bool canceled)
+        {
+            BacktestStopped?.Invoke(canceled);
+        }
+
     }
 
 }

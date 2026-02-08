@@ -22,9 +22,9 @@ namespace Charts
 
         private readonly List<MacdPoint> _macd = new();
         private readonly Dictionary<GraphKBar, int> _indexMap = new();
-        private readonly Brush _difBrush = new SolidColorBrush(Color.FromRgb(255, 180, 0));
-        private readonly Brush _deaBrush = new SolidColorBrush(Color.FromRgb(180, 220, 255));
-        private const double _lineThickness = 1.5;
+        private SolidColorBrush _difBrush = new SolidColorBrush(Color.FromRgb(0x64, 0xC8, 0xFF));
+        private SolidColorBrush _deaBrush = new SolidColorBrush(Color.FromRgb(0xFF, 0xFF, 0x00));
+        private const double _lineThickness = 1.0;
         private double? _prevDifX, _prevDifY, _prevDeaX, _prevDeaY;
         private decimal? _prevDifVal, _prevDeaVal, _prevHistVal;
         private int _lastDifDir = 0, _lastDeaDir = 0, _lastHistDir = 0; // 1 up, -1 down, 0 none
@@ -52,10 +52,12 @@ namespace Charts
                 try
                 {
                     var (f, s, sig) = GetParameters();
-                    var dlg = new MacdSettingsDialog(f, s, sig) { Owner = Window.GetWindow(this) };
+                    var (dc, ec) = GetLineColors();
+                    var dlg = new MacdSettingsDialog(f, s, sig, dc, ec) { Owner = Window.GetWindow(this) };
                     if (dlg.ShowDialog() == true)
                     {
                         SetParameters(dlg.Ema1, dlg.Ema2, dlg.Day);
+                        SetLineColors(dlg.DifColor, dlg.DeaColor);
                     }
                 }
                 catch { }
@@ -121,6 +123,9 @@ namespace Charts
                 };
                 _macd.Add(macd);
                 _indexMap[_hisBars[i]] = i;
+                _hisBars[i].Indicators["MACD_DIF"] = dif;
+                _hisBars[i].Indicators["MACD_DEA"] = dea;
+                _hisBars[i].Indicators["MACD_HIST"] = dif - dea;
             }
         }
 
@@ -154,6 +159,7 @@ namespace Charts
         }
 
         public (int fast, int slow, int signal) GetParameters() => (_fast, _slow, _signal);
+        public (Color difColor, Color deaColor) GetLineColors() => (_difBrush.Color, _deaBrush.Color);
 
         public void SetParameters(int fast, int slow, int signal)
         {
@@ -161,6 +167,13 @@ namespace Charts
             _slow = Math.Max(_fast + 1, slow);
             _signal = Math.Max(1, signal);
             RecalculateMacd();
+        }
+
+        public void SetLineColors(Color difColor, Color deaColor)
+        {
+            _difBrush = new SolidColorBrush(difColor);
+            _deaBrush = new SolidColorBrush(deaColor);
+            ApplyXViewState(_visibleStartIndex, _barSpacing);
         }
 
         protected override void DrawSingleBar(GraphKBar bar, double x)

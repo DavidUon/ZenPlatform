@@ -1,9 +1,11 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Threading.Tasks;
 using System.Windows.Input;
+using System.Windows.Threading;
 using Brokers;
 using ZenPlatform.Core;
 using ZenPlatform.LogText;
@@ -17,6 +19,13 @@ namespace ZenPlatform.MVVM.RulePage
         private readonly SessionManager.SessionManager _manager;
         private readonly IBroker _broker;
         private readonly UserInfoCtrl _userInfoCtrl;
+        private string _summaryPositionText = "無";
+        private decimal _summaryFloatProfit;
+        private decimal _summaryRealizedProfit;
+        private int _summaryTradeCount;
+        private decimal _summaryTotalProfit;
+        private readonly DispatcherTimer _summaryTimer;
+        private bool _summaryDirty;
 
         public SessionPageViewModel(SessionManager.SessionManager manager, IBroker broker, UserInfoCtrl userInfoCtrl)
         {
@@ -27,6 +36,17 @@ namespace ZenPlatform.MVVM.RulePage
             _manager.PropertyChanged += OnManagerPropertyChanged;
             QueryMarginCommand = new AsyncRelayCommand(QueryMarginAsync);
             CheckCertCommand = new AsyncRelayCommand(CheckCertAsync);
+            Sessions.CollectionChanged += OnSessionsChanged;
+            foreach (var session in Sessions)
+            {
+                session.PropertyChanged += OnSessionPropertyChanged;
+            }
+            _summaryTimer = new DispatcherTimer(DispatcherPriority.Background)
+            {
+                Interval = TimeSpan.FromSeconds(1)
+            };
+            _summaryTimer.Tick += OnSummaryTimerTick;
+            RebuildSummary();
         }
 
         public SessionManager.SessionManager Manager => _manager;
@@ -52,8 +72,65 @@ namespace ZenPlatform.MVVM.RulePage
         }
 
         public string StrategyButtonText => _manager.StrategyButtonText;
-        public ObservableCollection<ISession> Sessions => _manager.Sessions;
+        public ObservableCollection<Session> Sessions => _manager.Sessions;
         public LogModel Log => _manager.Log;
+        public string SummaryPositionText
+        {
+            get => _summaryPositionText;
+            private set
+            {
+                if (string.Equals(_summaryPositionText, value, StringComparison.Ordinal))
+                {
+                    return;
+                }
+                _summaryPositionText = value;
+                OnPropertyChanged(nameof(SummaryPositionText));
+            }
+        }
+
+        public decimal SummaryFloatProfit
+        {
+            get => _summaryFloatProfit;
+            private set
+            {
+                if (_summaryFloatProfit == value) return;
+                _summaryFloatProfit = value;
+                OnPropertyChanged(nameof(SummaryFloatProfit));
+            }
+        }
+
+        public decimal SummaryRealizedProfit
+        {
+            get => _summaryRealizedProfit;
+            private set
+            {
+                if (_summaryRealizedProfit == value) return;
+                _summaryRealizedProfit = value;
+                OnPropertyChanged(nameof(SummaryRealizedProfit));
+            }
+        }
+
+        public int SummaryTradeCount
+        {
+            get => _summaryTradeCount;
+            private set
+            {
+                if (_summaryTradeCount == value) return;
+                _summaryTradeCount = value;
+                OnPropertyChanged(nameof(SummaryTradeCount));
+            }
+        }
+
+        public decimal SummaryTotalProfit
+        {
+            get => _summaryTotalProfit;
+            private set
+            {
+                if (_summaryTotalProfit == value) return;
+                _summaryTotalProfit = value;
+                OnPropertyChanged(nameof(SummaryTotalProfit));
+            }
+        }
 
         public ICommand QueryMarginCommand { get; }
         public ICommand CheckCertCommand { get; }
@@ -86,6 +163,94 @@ namespace ZenPlatform.MVVM.RulePage
                 OnPropertyChanged(nameof(BacktestButtonText));
                 OnPropertyChanged(nameof(IsBacktestButtonEnabled));
             }
+        }
+
+        private void OnSessionsChanged(object? sender, NotifyCollectionChangedEventArgs e)
+        {
+            if (e.OldItems != null)
+            {
+                foreach (var item in e.OldItems)
+                {
+                    if (item is Session session)
+                    {
+                        session.PropertyChanged -= OnSessionPropertyChanged;
+                    }
+                }
+            }
+
+            if (e.NewItems != null)
+            {
+                foreach (var item in e.NewItems)
+                {
+                    if (item is Session session)
+                    {
+                        session.PropertyChanged += OnSessionPropertyChanged;
+                    }
+                }
+            }
+
+            RebuildSummary();
+        }
+
+        private void OnSessionPropertyChanged(object? sender, PropertyChangedEventArgs e)
+        {
+            switch (e.PropertyName)
+            {
+                case nameof(Session.Position):
+                case nameof(Session.FloatProfit):
+                case nameof(Session.RealizedProfit):
+                case nameof(Session.TradeCount):
+                    MarkSummaryDirty();
+                    break;
+            }
+        }
+
+        private void MarkSummaryDirty()
+        {
+            _summaryDirty = true;
+            if (!_summaryTimer.IsEnabled)
+            {
+                _summaryTimer.Start();
+            }
+        }
+
+        private void OnSummaryTimerTick(object? sender, EventArgs e)
+        {
+            if (!_summaryDirty)
+            {
+                _summaryTimer.Stop();
+                return;
+            }
+
+            _summaryDirty = false;
+            RebuildSummary();
+        }
+
+        private void RebuildSummary()
+        {
+            var totalPosition = 0;
+            decimal totalFloat = 0;
+            decimal totalRealized = 0;
+            var totalTrades = 0;
+
+            foreach (var session in Sessions)
+            {
+                totalPosition += session.Position;
+                totalFloat += session.FloatProfit;
+                totalRealized += session.RealizedProfit;
+                totalTrades += session.TradeCount;
+            }
+
+            SummaryPositionText = totalPosition switch
+            {
+                > 0 => $"多單 {totalPosition} 口",
+                < 0 => $"空單 {Math.Abs(totalPosition)} 口",
+                _ => "無"
+            };
+            SummaryFloatProfit = totalFloat;
+            SummaryRealizedProfit = totalRealized;
+            SummaryTradeCount = totalTrades;
+            SummaryTotalProfit = totalFloat + totalRealized;
         }
 
         private async Task QueryMarginAsync()

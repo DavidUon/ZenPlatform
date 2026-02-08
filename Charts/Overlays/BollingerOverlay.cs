@@ -25,11 +25,11 @@ namespace Charts
         private double _spacing;
 
         // 樣式
-        private readonly Brush _midBrush = new SolidColorBrush(Color.FromRgb(236, 210, 0));
-        private Brush _bandBrush = new SolidColorBrush(Color.FromArgb(50, 100, 160, 255));
-        private readonly Brush _edgeBrush = new SolidColorBrush(Color.FromRgb(100, 160, 255));
-        private Color _fillColor = Color.FromRgb(100, 160, 255);
-        private double _fillOpacity = 0.2; // 0..1
+        private Brush _midBrush = new SolidColorBrush(Color.FromRgb(0xD7, 0xD4, 0xD5));
+        private Brush _bandBrush = new SolidColorBrush(Color.FromArgb(15, 0xB7, 0xB8, 0xB7));
+        private Brush _edgeBrush = new SolidColorBrush(Color.FromRgb(0xB4, 0xB4, 0xB4));
+        private Color _fillColor = Color.FromRgb(0xB7, 0xB8, 0xB7);
+        private double _fillOpacity = 0.059597315436241624; // 0..1
 
         public BollingerOverlay() { }
         public BollingerOverlay(int period, double k) { _period = Math.Max(1, period); _k = k; }
@@ -38,14 +38,30 @@ namespace Charts
             _period = Math.Max(1, period); _k = k; _fillColor = fillColor; _fillOpacity = Math.Max(0, Math.Min(1, opacity));
             UpdateBandBrush();
         }
+        public BollingerOverlay(int period, double k, Color fillColor, double opacity, Color edgeColor, Color midColor)
+        {
+            _period = Math.Max(1, period); _k = k; _fillColor = fillColor; _fillOpacity = Math.Max(0, Math.Min(1, opacity));
+            _edgeBrush = new SolidColorBrush(edgeColor);
+            _midBrush = new SolidColorBrush(midColor);
+            UpdateBandBrush();
+        }
 
         public (int period, double k) GetParameters() => (_period, _k);
-        public (Color fill, double opacity) GetAppearance() => (_fillColor, _fillOpacity);
+        public (Color fill, double opacity, Color edge, Color mid) GetAppearance()
+            => (_fillColor, _fillOpacity, ((SolidColorBrush)_edgeBrush).Color, ((SolidColorBrush)_midBrush).Color);
         public void SetParameters(int period, double k) { _period = Math.Max(1, period); _k = k; Recalc(); }
         public void SetAppearance(Color fill, double opacity)
         {
             _fillColor = fill; _fillOpacity = Math.Max(0, Math.Min(1, opacity));
             UpdateBandBrush();
+        }
+        public void SetEdgeColor(Color edge)
+        {
+            _edgeBrush = new SolidColorBrush(edge);
+        }
+        public void SetMidColor(Color mid)
+        {
+            _midBrush = new SolidColorBrush(mid);
         }
 
         public void OnDataChanged(List<GraphKBar> bars)
@@ -173,6 +189,14 @@ namespace Charts
                 double var = 0; foreach (var v in win) { double d = v - ma; var += d * d; }
                 double std = Math.Sqrt(var / win.Count);
                 _up[i] = ma + _k * std; _dn[i] = ma - _k * std;
+
+                if (i < _bars.Count)
+                {
+                    var indicators = _bars[i].Indicators;
+                    indicators["BOLL_MID"] = (decimal)_mid[i];
+                    indicators["BOLL_UP"] = (decimal)_up[i];
+                    indicators["BOLL_DN"] = (decimal)_dn[i];
+                }
             }
         }
 
@@ -192,9 +216,9 @@ namespace Charts
             int dir(double curr, double prev) => curr > prev ? 1 : (curr < prev ? -1 : 0);
             string fmt = "F" + Math.Max(0, priceDecimals).ToString();
             // Compact labels: Up / Mid / Low
-            list.Add(new PriceInfoPanel.InfoLine { Label = "Up:", ValueText = _up[i].ToString(fmt), ValueBrush = new SolidColorBrush(Color.FromRgb(100,160,255)), ArrowDir = dir(_up[i], _up[p]) });
-            list.Add(new PriceInfoPanel.InfoLine { Label = "Mid:", ValueText = _mid[i].ToString(fmt), ValueBrush = new SolidColorBrush(Color.FromRgb(236,210,0)), ArrowDir = dir(_mid[i], _mid[p]) });
-            list.Add(new PriceInfoPanel.InfoLine { Label = "Low:", ValueText = _dn[i].ToString(fmt), ValueBrush = new SolidColorBrush(Color.FromRgb(100,160,255)), ArrowDir = dir(_dn[i], _dn[p]) });
+            list.Add(new PriceInfoPanel.InfoLine { Label = "Up:", ValueText = _up[i].ToString(fmt), ValueBrush = _edgeBrush, ArrowDir = dir(_up[i], _up[p]) });
+            list.Add(new PriceInfoPanel.InfoLine { Label = "Mid:", ValueText = _mid[i].ToString(fmt), ValueBrush = _midBrush, ArrowDir = dir(_mid[i], _mid[p]) });
+            list.Add(new PriceInfoPanel.InfoLine { Label = "Low:", ValueText = _dn[i].ToString(fmt), ValueBrush = _edgeBrush, ArrowDir = dir(_dn[i], _dn[p]) });
             return list;
         }
     }

@@ -23,7 +23,6 @@ namespace KChartCore
         {
             if (!File.Exists(csvPath))
             {
-                Console.WriteLine($"[Info] Trading calendar file not found, creating default file: {csvPath}");
                 CreateDefaultTradingCalendarFile(csvPath);
             }
 
@@ -50,7 +49,7 @@ namespace KChartCore
                 }
             }
 
-            Console.WriteLine($"[Info] Trading calendar loaded: {_holidays.Count} holidays, {_specialOpenDays.Count} special open days");
+            // Swallow logging here to avoid console dependency in WPF.
         }
 
         /// <summary>
@@ -138,9 +137,9 @@ namespace KChartCore
                 File.WriteAllText(csvPath, defaultContent, System.Text.Encoding.UTF8);
                 Console.WriteLine($"[Info] Default trading calendar file created successfully");
             }
-            catch (Exception ex)
+            catch
             {
-                Console.WriteLine($"[Error] Failed to create default trading calendar file: {ex.Message}");
+                // Ignore file creation failures and rely on weekend rules.
             }
         }
     }

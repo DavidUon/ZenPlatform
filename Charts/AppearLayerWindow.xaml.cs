@@ -32,6 +32,7 @@ namespace Charts
 
             var cfgs = _chart.GetMainPricePane().GetOverlayConfigs();
             CbMa.IsChecked = cfgs.Any(c => c.Type == "MA");
+            CbBbi.IsChecked = cfgs.Any(c => c.Type == "BBI");
             CbBoll.IsChecked = cfgs.Any(c => c.Type == "BOLL");
         }
 
@@ -50,6 +51,8 @@ namespace Charts
             CbMacd.Unchecked += (_, __) => ToggleMacd(false);
             CbMa.Checked += (_, __) => ToggleMa(true);
             CbMa.Unchecked += (_, __) => ToggleMa(false);
+            CbBbi.Checked += (_, __) => ToggleBbi(true);
+            CbBbi.Unchecked += (_, __) => ToggleBbi(false);
             CbBoll.Checked += (_, __) => ToggleBoll(true);
             CbBoll.Unchecked += (_, __) => ToggleBoll(false);
         }
@@ -114,12 +117,25 @@ namespace Charts
             {
                 if (!has)
                 {
-                    _chart.AddMaOverlay(20, "SMA", Colors.Gold);
+                    _chart.AddMaOverlay(144, "SMA", Colors.Gold);
                 }
             }
             else
             {
                 if (has) _chart.ClearMaOverlays();
+            }
+        }
+        private void ToggleBbi(bool on)
+        {
+            var pane = _chart.GetMainPricePane();
+            var has = pane.GetOverlayConfigs().Any(c => c.Type == "BBI");
+            if (on)
+            {
+                if (!has) _chart.AddBbiOverlay();
+            }
+            else
+            {
+                if (has) _chart.RemoveBbiOverlay();
             }
         }
         private void ToggleBoll(bool on)

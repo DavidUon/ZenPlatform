@@ -347,7 +347,7 @@
                 </TextBlock>
             </StackPanel>
 
-            <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right">
+            <StackPanel x:Name="BacktestActionPanel" Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right">
                 <Button x:Name="CancelBacktestButton" Padding="12,4" Margin="0,0,8,0" FontSize="15"
                         Click="OnCancelBacktest">取消</Button>
                 <Button x:Name="StartBacktestButton" Padding="12,4" FontSize="15" Width="160"

@@ -29,6 +29,7 @@
             <CheckBox x:Name="CbTooltip" Content="顯示查價視窗" />
             <Separator Margin="0,10,0,10"/>
             <CheckBox x:Name="CbMa"   Content="均線" />
+            <CheckBox x:Name="CbBbi"  Content="BBI 指標" />
             <CheckBox x:Name="CbBoll" Content="布林通道"   />
             <Separator Margin="0,10,0,10"/>
             <CheckBox x:Name="CbVol"  Content="成交量" />

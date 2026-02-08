@@ -10,6 +10,7 @@ using ZenPlatform.Core;
 using ZenPlatform.MVVM.RulePage;
 using ZenPlatform.SessionManager;
 using ZenPlatform.SessionManager.Backtest;
+using ZenPlatform.Utility;
 
 namespace ZenPlatform.MVVM.UserControls
 {
@@ -24,6 +25,7 @@ namespace ZenPlatform.MVVM.UserControls
         private Stopwatch? _backtestStopwatch;
         private int _backtestStopOnce;
         private Action<int>? _backtestProgressHandler;
+        private Action<bool>? _backtestManagerStoppedHandler;
         private long _backtestTotalCount;
         private DateTime? _backtestRangeStart;
         private DateTime? _backtestRangeEnd;
@@ -53,6 +55,73 @@ namespace ZenPlatform.MVVM.UserControls
             }
         }
 
+        private void OnSessionGridRightButtonDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
+        {
+            var row = FindAncestor<System.Windows.Controls.DataGridRow>(e.OriginalSource as System.Windows.DependencyObject);
+            if (row != null)
+            {
+                row.IsSelected = true;
+                SessionGrid.SelectedItem = row.Item;
+                SessionGrid.Focus();
+            }
+        }
+
+        private void OnSessionGridLeftButtonDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
+        {
+            var row = FindAncestor<System.Windows.Controls.DataGridRow>(e.OriginalSource as System.Windows.DependencyObject);
+            if (row == null)
+            {
+                SessionGrid.SelectedIndex = -1;
+                SessionGrid.UnselectAll();
+            }
+        }
+
+        private void OnSessionGridLostFocus(object sender, RoutedEventArgs e)
+        {
+            SessionGrid.SelectedIndex = -1;
+            SessionGrid.UnselectAll();
+        }
+
+        private void OnSessionGridContextMenuOpening(object sender, System.Windows.Controls.ContextMenuEventArgs e)
+        {
+            if (DataContext is not SessionPageViewModel page)
+            {
+                return;
+            }
+
+            if (SessionGrid.SelectedItem is not ZenPlatform.Strategy.Session session)
+            {
+                CloseSessionMenuItem.Visibility = System.Windows.Visibility.Collapsed;
+                return;
+            }
+
+            var hasPosition = session.Position != 0;
+            CloseSessionMenuItem.Visibility = hasPosition ? System.Windows.Visibility.Visible : System.Windows.Visibility.Collapsed;
+            CloseSessionMenuItem.IsEnabled = hasPosition;
+        }
+
+        private void OnCloseSessionClick(object sender, RoutedEventArgs e)
+        {
+            if (SessionGrid.SelectedItem is ZenPlatform.Strategy.Session session)
+            {
+                session.CloseAll();
+            }
+        }
+
+        private static T? FindAncestor<T>(System.Windows.DependencyObject? current) where T : System.Windows.DependencyObject
+        {
+            while (current != null)
+            {
+                if (current is T typed)
+                {
+                    return typed;
+                }
+                current = System.Windows.Media.VisualTreeHelper.GetParent(current);
+            }
+
+            return null;
+        }
+
         private void OnCreateSessionClick(object sender, RoutedEventArgs e)
         {
             if (DataContext is not SessionPageViewModel page)
@@ -61,13 +130,14 @@ namespace ZenPlatform.MVVM.UserControls
             }
 
             var owner = Window.GetWindow(this);
-            var dialog = new SessionEntryWindow
+            var dialog = new SelectSideWindow
             {
-                Owner = owner
+                Owner = owner,
+                WindowStartupLocation = WindowStartupLocation.CenterOwner
             };
 
             var result = dialog.ShowDialog();
-            if (result != true || dialog.SelectedSide == null)
+            if (result != true || dialog.SelectedIsBuy == null)
             {
                 return;
             }
@@ -78,7 +148,7 @@ namespace ZenPlatform.MVVM.UserControls
                 return;
             }
 
-            session.Start(dialog.SelectedSide.Value);
+            session.Start(dialog.SelectedIsBuy.Value);
         }
 
         private void OnStrategySettingsClick(object sender, RoutedEventArgs e)
@@ -144,20 +214,31 @@ namespace ZenPlatform.MVVM.UserControls
 
             _backtestEngine?.Dispose();
             _backtestEngine = new BacktestEngine(page.Manager);
+            _backtestEngine.UseBarCloseTimeSignal = info.Mode != TaifexHisDbManager.BacktestMode.Fast;
             _backtestEngine.Initialize();
+            _core.LogCtrl.SetRenderSuspended(false);
 
             _backtestCts = new CancellationTokenSource();
             _backtestRangeStart = info.Start;
             _backtestRangeEnd = info.End;
             _backtestLastMode = info.Mode;
+            page.Manager.StrategyStartTime = info.Start;
             if (!page.Manager.IsStrategyRunning)
             {
                 page.Manager.ToggleStrategy();
             }
-            page.Manager.Log.SetMaxLines(500);
+            page.Manager.Log.SetMaxLines(1000);
             page.Manager.Log.Clear();
             page.Manager.Log.UseSystemTime();
             page.Manager.Log.Add("==== 回測開始 ====");
+            if (_core.LogCtrl.TryGetTargetScreenRect(out var logRect))
+            {
+                var title = string.IsNullOrWhiteSpace(page.Manager.DisplayName)
+                    ? $"策略{page.Manager.Index + 1}回測中"
+                    : $"{page.Manager.DisplayName}回測中";
+                ConsoleLog.OpenAt(logRect, title);
+            }
+            _core.LogCtrl.SetConsoleOnly(true);
             _backtestStopwatch = Stopwatch.StartNew();
             _backtestStopOnce = 0;
             Action<string> log = text => Dispatcher.Invoke(() => page.Manager.Log.AddAt(DateTime.Now, text));
@@ -168,10 +249,18 @@ namespace ZenPlatform.MVVM.UserControls
             Action<string> setStatus = text => Dispatcher.Invoke(() => page.Manager.BacktestStatusText = text);
             _backtestProgressHandler = percent => Dispatcher.Invoke(() => page.Manager.BacktestProgressPercent = percent);
             _backtestEngine.ProgressChanged += _backtestProgressHandler;
+            _backtestManagerStoppedHandler = wasCanceled =>
+                Dispatcher.BeginInvoke(new Action(() =>
+                {
+                    StopBacktest(wasCanceled);
+                }));
+            page.Manager.BacktestStopped += _backtestManagerStoppedHandler;
             Action<long> setTotalCount = total => Interlocked.Exchange(ref _backtestTotalCount, total);
             _backtestTask = Task.Run(() => RunBacktest(_backtestEngine, dataSource, product, info.Start.Value, info.End.Value, info.PreloadDays, info.Mode, _core, log, logWithTime, setStatus, setTotalCount, _backtestCts.Token));
-            var uiScheduler = TaskScheduler.FromCurrentSynchronizationContext();
-            _backtestTask.ContinueWith(_ => StopBacktest(false), uiScheduler);
+            _backtestTask.ContinueWith(_ =>
+            {
+                Dispatcher.BeginInvoke(new Action(() => StopBacktest(false)), System.Windows.Threading.DispatcherPriority.Send);
+            }, TaskScheduler.Default);
         }
 
         private void OnRealTradeChecked(object sender, System.Windows.RoutedEventArgs e)
@@ -226,75 +315,95 @@ namespace ZenPlatform.MVVM.UserControls
 
         private void StopBacktest(bool wasCanceled = false)
         {
-            if (Interlocked.Exchange(ref _backtestStopOnce, 1) == 1)
+            if (!Dispatcher.CheckAccess())
             {
+                Dispatcher.BeginInvoke(new Action(() => StopBacktest(wasCanceled)), System.Windows.Threading.DispatcherPriority.Send);
                 return;
             }
-            if (_backtestEngine != null)
+            try
             {
-                if (_backtestProgressHandler != null)
+                if (Interlocked.Exchange(ref _backtestStopOnce, 1) == 1)
                 {
-                    _backtestEngine.ProgressChanged -= _backtestProgressHandler;
-                    _backtestProgressHandler = null;
+                    return;
                 }
-                _backtestEngine.Manager.IsBacktestActive = false;
-            }
-            if (_backtestCts != null)
-            {
-                _backtestCts.Cancel();
-                _backtestCts.Dispose();
-                _backtestCts = null;
-            }
-            if (_backtestEngine?.Manager.IsStrategyRunning == true)
-            {
-                _backtestEngine.Manager.StopStrategySilently();
-            }
-            if (_backtestEngine != null)
-            {
-                _backtestEngine.Manager.Log.UseSystemTime();
-                _backtestEngine.Manager.Log.SetMaxLines(5000);
-                if (_backtestStopwatch != null)
+                if (_backtestEngine != null)
                 {
-                    _backtestStopwatch.Stop();
-                }
-                var lastEntry = _backtestEngine.Manager.Log.Entries.Count > 0
-                    ? _backtestEngine.Manager.Log.Entries[^1].Text
-                    : string.Empty;
-                if (wasCanceled)
-                {
-                    if (!string.Equals(lastEntry, "==== 回測中斷 ====", StringComparison.Ordinal))
+                    if (_backtestProgressHandler != null)
                     {
-                        _backtestEngine.Manager.Log.AddAt(DateTime.Now, "==== 回測中斷 ====");
+                        _backtestEngine.ProgressChanged -= _backtestProgressHandler;
+                        _backtestProgressHandler = null;
+                    }
+                    if (_backtestManagerStoppedHandler != null)
+                    {
+                        _backtestEngine.Manager.BacktestStopped -= _backtestManagerStoppedHandler;
+                        _backtestManagerStoppedHandler = null;
                     }
                 }
-                else
+                if (_backtestCts != null)
                 {
-                    var elapsed = _backtestStopwatch?.Elapsed ?? TimeSpan.Zero;
-                    var modeText = _backtestLastMode == TaifexHisDbManager.BacktestMode.Fast
-                        ? "快速回測"
-                        : "精確回測";
-                    _backtestEngine.Manager.Log.AddAt(DateTime.Now, "==== 回測結束 ====");
-                    _backtestEngine.Manager.Log.AddAt(DateTime.Now, modeText);
-                    _backtestEngine.Manager.Log.AddAt(DateTime.Now, $"用時 {elapsed:hh\\:mm\\:ss}");
-                    if (_backtestRangeStart.HasValue && _backtestRangeEnd.HasValue && elapsed.TotalSeconds > 0)
+                    _backtestCts.Cancel();
+                    _backtestCts.Dispose();
+                    _backtestCts = null;
+                }
+
+                if (_backtestEngine?.Manager.IsStrategyRunning == true)
+                {
+                    _backtestEngine.Manager.StopStrategySilently();
+                }
+
+                if (_backtestEngine != null)
+                {
+                    _backtestEngine.Manager.Log.UseSystemTime();
+                    _backtestEngine.Manager.Log.SetMaxLines(5000);
+                    if (_backtestStopwatch != null)
                     {
-                        var minutes = (_backtestRangeEnd.Value - _backtestRangeStart.Value).TotalMinutes;
-                        if (minutes > 0)
+                        _backtestStopwatch.Stop();
+                    }
+                    var lastEntry = _backtestEngine.Manager.Log.Entries.Count > 0
+                        ? _backtestEngine.Manager.Log.Entries[^1].Text
+                        : string.Empty;
+                    if (wasCanceled)
+                    {
+                        if (!string.Equals(lastEntry, "==== 回測中斷 ====", StringComparison.Ordinal))
                         {
-                            _backtestEngine.Manager.Log.AddAt(DateTime.Now, $"回測總分鐘數: {minutes:0}");
-                            var metric = minutes / 1440.0 / elapsed.TotalSeconds;
-                            _backtestEngine.Manager.Log.AddAt(DateTime.Now, $"效能指標: {metric:0.00} (回測天/秒)");
+                            _backtestEngine.Manager.Log.AddAt(DateTime.Now, "==== 回測中斷 ====");
+                        }
+                    }
+                    else
+                    {
+                        var elapsed = _backtestStopwatch?.Elapsed ?? TimeSpan.Zero;
+                        var modeText = _backtestLastMode == TaifexHisDbManager.BacktestMode.Fast
+                            ? "快速回測"
+                            : "精確回測";
+                        _backtestEngine.Manager.Log.AddAt(DateTime.Now, "==== 回測結束 ====");
+                        _backtestEngine.Manager.Log.AddAt(DateTime.Now, modeText);
+                        _backtestEngine.Manager.Log.AddAt(DateTime.Now, $"用時 {elapsed:hh\\:mm\\:ss}");
+                        if (_backtestRangeStart.HasValue && _backtestRangeEnd.HasValue && elapsed.TotalSeconds > 0)
+                        {
+                            var minutes = (_backtestRangeEnd.Value - _backtestRangeStart.Value).TotalMinutes;
+                            if (minutes > 0)
+                            {
+                                _backtestEngine.Manager.Log.AddAt(DateTime.Now, $"回測總分鐘數: {minutes:0}");
+                                var metric = minutes / 1440.0 / elapsed.TotalSeconds;
+                                _backtestEngine.Manager.Log.AddAt(DateTime.Now, $"效能指標: {metric:0.00} (回測天/秒)");
+                            }
                         }
                     }
                 }
+                _backtestEngine?.Dispose();
+                _backtestEngine = null;
+                _backtestTask = null;
+                _backtestStopwatch = null;
+                _backtestRangeStart = null;
+                _backtestRangeEnd = null;
+                _backtestLastMode = default;
+                _core?.LogCtrl.SetConsoleOnly(false);
+                ConsoleLog.Close();
             }
-            _backtestEngine?.Dispose();
-            _backtestEngine = null;
-            _backtestTask = null;
-            _backtestStopwatch = null;
-            _backtestRangeStart = null;
-            _backtestRangeEnd = null;
-            _backtestLastMode = default;
+            catch (Exception)
+            {
+                throw;
+            }
         }
 
 
@@ -313,7 +422,12 @@ namespace ZenPlatform.MVVM.UserControls
             Action<long> setTotalCount,
             CancellationToken token)
         {
-            DateTime preloadStart = preloadDays > 0 ? start.AddDays(-preloadDays) : start;
+            DateTime preloadStart = start;
+            if (preloadDays > 0)
+            {
+                var found = dataSource.FindPreloadStartByTime(product, start, preloadDays);
+                preloadStart = found ?? start.AddDays(-preloadDays);
+            }
             engine.Manager.SuppressIndicatorLog = true;
 
             long totalMain;
@@ -587,7 +701,7 @@ namespace ZenPlatform.MVVM.UserControls
 
         private void OnMouseLeave(object sender, RoutedEventArgs e)
         {
-            SessionGrid.SelectedItem = null;
+            // SessionGrid.SelectedItem = null; // Removed this line to prevent selection from clearing on mouse leave
         }
 
         private void CaptureColumnWidths()

@@ -17,6 +17,7 @@ namespace ZenPlatform.Core
         private string? _subscribedSymbol;
         private readonly Timer _healthTimer;
         private int _healthRunning;
+        private DateTime _lastConnectFailureAt = DateTime.MinValue;
 
         public DdeService(DdePrice.DdePrice dde)
         {
@@ -41,8 +42,17 @@ namespace ZenPlatform.Core
                     return;
                 }
 
-                _dde.Initialize();
-                _conversation = _dde.Connect(service, topic);
+                try
+                {
+                    _dde.Initialize();
+                    _conversation = _dde.Connect(service, topic);
+                    _lastConnectFailureAt = DateTime.MinValue;
+                }
+                catch (DdeException)
+                {
+                    _conversation = IntPtr.Zero;
+                    _lastConnectFailureAt = DateTime.Now;
+                }
             }).Task;
         }
 

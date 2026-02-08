@@ -4,15 +4,49 @@
         Title="輸入數字" SizeToContent="WidthAndHeight" WindowStartupLocation="CenterOwner"
         ResizeMode="NoResize" Background="#101014" Foreground="#E8E8E8"
         TextOptions.TextFormattingMode="Display" TextOptions.TextRenderingMode="ClearType" SnapsToDevicePixels="True">
+    <Window.Resources>
+        <Style x:Key="StrategyButtonStyle" TargetType="Button">
+            <Setter Property="Background" Value="{StaticResource BrushButtonBackground}" />
+            <Setter Property="Foreground" Value="{StaticResource BrushText}" />
+            <Setter Property="BorderBrush" Value="{StaticResource BrushButtonBorder}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Padding" Value="8,2" />
+            <Setter Property="MinWidth" Value="80" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="{x:Type Button}">
+                        <Border x:Name="Border"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}">
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"
+                                              Margin="{TemplateBinding Padding}" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Border" Property="Background" Value="#FF787878" />
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Border" Property="Background" Value="#FF606060" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="Border" Property="Opacity" Value="0.5" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
     <Border Background="#18181D" CornerRadius="6" Margin="12" Padding="12">
         <StackPanel>
             <TextBlock Text="請輸入數字：" Margin="0,0,0,8"/>
             <TextBox x:Name="PeriodBox" Width="160" Background="#202027" Foreground="#F0F0F0"/>
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,10,0,0">
-                <Button Width="80" Margin="4" Content="確定" IsDefault="True" Click="Ok_Click"/>
-                <Button Width="80" Margin="4" Content="取消" IsCancel="True"/>
+                <Button Width="80" Margin="4" Content="確定" IsDefault="True" Click="Ok_Click" Style="{StaticResource StrategyButtonStyle}"/>
+                <Button Width="80" Margin="4" Content="取消" IsCancel="True" Style="{StaticResource StrategyButtonStyle}"/>
             </StackPanel>
         </StackPanel>
     </Border>
 </Window>
-

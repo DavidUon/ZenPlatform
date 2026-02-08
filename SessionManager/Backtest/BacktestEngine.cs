@@ -13,6 +13,7 @@ namespace ZenPlatform.SessionManager.Backtest
         private bool _prevAcceptSecondTicks;
         private Func<int, System.Collections.Generic.List<KChartCore.FunctionKBar>>? _prevFetchHistoryBars;
         private Action<int>? _prevRegisterKBarPeriod;
+        private Action<int>? _prevUnregisterKBarPeriod;
         private Func<bool>? _prevIsHistoryReady;
         private int _prevLogMaxLines;
         private readonly System.Collections.Concurrent.ConcurrentQueue<BacktestEvent> _queue = new();
@@ -24,8 +25,11 @@ namespace ZenPlatform.SessionManager.Backtest
         private long _totalUnits;
         private long _processedUnits;
         private int _lastPercent = -1;
+        private int _stopNotified;
 
         public event Action<int>? ProgressChanged;
+        public event Action<bool>? Stopped;
+        public bool UseBarCloseTimeSignal { get; set; }
 
         public BacktestEngine(SessionManager manager)
         {
@@ -48,6 +52,7 @@ namespace ZenPlatform.SessionManager.Backtest
             _prevAcceptSecondTicks = _manager.AcceptSecondTicks;
             _prevFetchHistoryBars = _manager.FetchHistoryBars;
             _prevRegisterKBarPeriod = _manager.RegisterKBarPeriod;
+            _prevUnregisterKBarPeriod = _manager.UnregisterKBarPeriod;
             _prevIsHistoryReady = _manager.IsHistoryReady;
             _prevLogMaxLines = _manager.Log.MaxLines;
             _manager.IsBacktestActive = true;
@@ -59,6 +64,7 @@ namespace ZenPlatform.SessionManager.Backtest
 
             _manager.FetchHistoryBars = period => _chartBridge.GetHistoryList(period);
             _manager.RegisterKBarPeriod = period => _chartBridge.RegisterPeriod(period);
+            _manager.UnregisterKBarPeriod = period => _chartBridge.UnregisterPeriod(period);
             _manager.IsHistoryReady = () => _chartBridge.HistoryReady;
 
             _chartBridge.HistoryReady = true;
@@ -149,22 +155,22 @@ namespace ZenPlatform.SessionManager.Backtest
                 return;
             }
 
+            if (UseBarCloseTimeSignal)
+            {
+                _manager.OnSecond(bar.CloseTime);
+            }
+
             if (!_manager.IsStrategyRunning)
             {
                 return;
             }
 
-            if (_manager.Indicators == null)
+            if (!_manager.IsKBarPeriodRegistered(period))
             {
                 return;
             }
 
-            if (_manager.RuleSet.KbarPeriod != period)
-            {
-                return;
-            }
-
-            lock (_manager.IndicatorSync)
+            if (_manager.RuleSet.KbarPeriod == period)
             {
                 var closeStamp = new DateTime(bar.CloseTime.Year, bar.CloseTime.Month, bar.CloseTime.Day,
                     bar.CloseTime.Hour, bar.CloseTime.Minute, 0, DateTimeKind.Unspecified);
@@ -174,18 +180,30 @@ namespace ZenPlatform.SessionManager.Backtest
                     return;
                 }
 
-                _manager.Indicators.Update(new ZenPlatform.Indicators.KBar(bar.StartTime, bar.Open, bar.High, bar.Low, bar.Close, bar.Volume));
-                _manager.LastIndicatorBarCloseTime = closeStamp;
-
-                if (_manager.IndicatorsReadyForLog && !_manager.SuppressIndicatorLog)
+                if (_manager.Indicators != null)
                 {
-                    DebugBus.Send($"[M{_manager.Index + 1}] {_manager.BuildIndicatorSnapshot()}", "指標");
+                    lock (_manager.IndicatorSync)
+                    {
+                        _manager.Indicators.Update(new ZenPlatform.Indicators.KBar(bar.StartTime, bar.Open, bar.High, bar.Low, bar.Close, bar.Volume));
+                        _manager.LastIndicatorBarCloseTime = closeStamp;
+
+                        if (_manager.IndicatorsReadyForLog && !_manager.SuppressIndicatorLog)
+                        {
+                        }
+                    }
+                }
+                else
+                {
+                    _manager.LastIndicatorBarCloseTime = closeStamp;
                 }
             }
+
+            _manager.OnKBarCompleted(period, bar);
         }
 
         public void Dispose()
         {
+            NotifyStopped(canceled: true);
             _cts.Cancel();
             try
             {
@@ -198,14 +216,26 @@ namespace ZenPlatform.SessionManager.Backtest
             _chartBridge.KBarCompleted -= OnKBarCompleted;
             _manager.FetchHistoryBars = _prevFetchHistoryBars;
             _manager.RegisterKBarPeriod = _prevRegisterKBarPeriod;
+            _manager.UnregisterKBarPeriod = _prevUnregisterKBarPeriod;
             _manager.IsHistoryReady = _prevIsHistoryReady;
             _manager.AcceptPriceTicks = _prevAcceptPriceTicks;
             _manager.AcceptSecondTicks = _prevAcceptSecondTicks;
             _manager.Log.SetMaxLines(_prevLogMaxLines > 0 ? _prevLogMaxLines : 5000);
+            _drainTcs.TrySetCanceled();
+        }
+
+        private void NotifyStopped(bool canceled)
+        {
+            if (System.Threading.Interlocked.Exchange(ref _stopNotified, 1) == 1)
+            {
+                return;
+            }
+
             _manager.IsBacktestActive = false;
             _manager.BacktestStatusText = string.Empty;
             _manager.BacktestProgressPercent = 0;
-            _drainTcs.TrySetCanceled();
+            Stopped?.Invoke(canceled);
+            _manager.RaiseBacktestStopped(canceled);
         }
 
         private async System.Threading.Tasks.Task ConsumeAsync(System.Threading.CancellationToken token)
@@ -248,11 +278,13 @@ namespace ZenPlatform.SessionManager.Backtest
                     if (_productionCompleted && _queue.IsEmpty)
                     {
                         _drainTcs.TrySetResult(true);
+                        NotifyStopped(canceled: false);
                     }
                 }
             }
             catch (System.OperationCanceledException)
             {
+                NotifyStopped(canceled: true);
             }
         }
 

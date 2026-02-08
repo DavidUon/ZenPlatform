@@ -68,6 +68,13 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Compile Remove="Navigator\\**\\*.cs" />
+    <Page Remove="Navigator\\**\\*.xaml" />
+    <EmbeddedResource Remove="Navigator\\**\\*" />
+    <None Remove="Navigator\\**\\*" />
+  </ItemGroup>
+
+  <ItemGroup>
     <Compile Remove="Client\\ZClientCtrl\\**\\*.cs" />
     <EmbeddedResource Remove="Client\\ZClientCtrl\\**\\*" />
     <None Remove="Client\\ZClientCtrl\\**\\*" />

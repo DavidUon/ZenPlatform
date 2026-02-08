@@ -199,33 +199,75 @@ namespace Charts
                 var owner = Window.GetWindow(this);
                 if (id == "MA")
                 {
-                    var dlg = new MaSettingsDialog(20, "SMA") { Owner = owner };
+                    var cfgs = GetOverlayConfigs().Where(o => o.Type == "MA").ToList();
+                    var defaults = new List<(int period, string maType, Color color)>();
+                    if (cfgs.Count == 0)
+                    {
+                        defaults.Add((144, "SMA", Color.FromRgb(0xFF, 0xD7, 0x00)));
+                    }
+                    else
+                    {
+                        foreach (var c in cfgs)
+                        {
+                            var col = string.IsNullOrEmpty(c.ColorHex) ? Color.FromRgb(0xFF, 0xD7, 0x00) : (Color)ColorConverter.ConvertFromString(c.ColorHex!);
+                            defaults.Add((Math.Max(1, c.Period), c.MaType ?? "MA", col));
+                        }
+                    }
+                    var dlg = new MaSettingsDialog(defaults) { Owner = owner };
                     if (dlg.ShowDialog() == true)
                     {
-                        if (dlg.IsAdd)
-                            AddOverlay(new MaOverlay(dlg.Period, dlg.MaType, dlg.LineColor, 1.0));
-                        else
-                            RemoveMaByPeriod(dlg.Period);
+                        RemoveOverlaysByTag("均線");
+                        foreach (var ln in dlg.ResultLines)
+                        {
+                            AddOverlay(new MaOverlay(ln.Period, ln.MaType, ln.Color, 1.0));
+                        }
                         UpdateOverlaySectionsLatest();
                     }
                 }
                 else if (id == "BOLL")
                 {
                     // 取目前值作為預設
-                    int defP = 20; double defK = 2.0; Color defFill = Color.FromRgb(0x64,0xA0,0xFF); double defOpa = 0.2;
+                    int defP = 20; double defK = 2.0; Color defFill = Color.FromRgb(0xB7,0xB8,0xB7);
+                    Color defEdge = Color.FromRgb(0xB4,0xB4,0xB4);
+                    Color defMid = Color.FromRgb(0xD7,0xD4,0xD5);
+                    double defOpa = 0.059597315436241624;
                     var curr = GetOverlayConfigs().FirstOrDefault(o => o.Type == "BOLL");
                     if (curr != null)
                     {
                         if (curr.Period > 0) defP = curr.Period;
                         if (curr.K > 0) defK = curr.K;
                         if (!string.IsNullOrEmpty(curr.FillHex)) defFill = (Color)ColorConverter.ConvertFromString(curr.FillHex!);
+                        if (!string.IsNullOrEmpty(curr.EdgeColorHex)) defEdge = (Color)ColorConverter.ConvertFromString(curr.EdgeColorHex!);
+                        if (!string.IsNullOrEmpty(curr.MidColorHex)) defMid = (Color)ColorConverter.ConvertFromString(curr.MidColorHex!);
                         if (curr.Opacity >= 0 && curr.Opacity <= 1) defOpa = curr.Opacity;
                     }
-                    var dlg = new BollSettingsDialog(defP, defK, defFill, defOpa) { Owner = owner };
+                    var dlg = new BollSettingsDialog(defP, defK, defFill, defEdge, defMid, defOpa) { Owner = owner };
                     if (dlg.ShowDialog() == true)
                     {
                         RemoveOverlaysByTag("布林通道");
-                        AddOverlay(new BollingerOverlay(dlg.Period, dlg.K, dlg.FillColor, dlg.FillOpacity));
+                        AddOverlay(new BollingerOverlay(dlg.Period, dlg.K, dlg.FillColor, dlg.FillOpacity, dlg.EdgeColor, dlg.MidColor));
+                        UpdateOverlaySectionsLatest();
+                    }
+                }
+                else if (id == "BBI")
+                {
+                    int[] defPeriods = new[] { 3, 6, 12, 24 };
+                    Color defColor = Color.FromRgb(0xFF, 0x8C, 0x00);
+                    var curr = GetOverlayConfigs().FirstOrDefault(o => o.Type == "BBI");
+                    if (curr != null)
+                    {
+                        if (!string.IsNullOrWhiteSpace(curr.BbiPeriodsCsv))
+                        {
+                            var parsed = ParseBbiPeriods(curr.BbiPeriodsCsv);
+                            if (parsed.Length > 0) defPeriods = parsed;
+                        }
+                        if (!string.IsNullOrEmpty(curr.ColorHex)) defColor = (Color)ColorConverter.ConvertFromString(curr.ColorHex!);
+                    }
+                    var dlg = new BbiSettingsDialog(defPeriods, defColor) { Owner = owner };
+                    if (dlg.ShowDialog() == true)
+                    {
+                        RemoveOverlaysByTag("BBI");
+                        AddOverlay(new BbiOverlay(dlg.Periods, dlg.LineColor));
                         UpdateOverlaySectionsLatest();
                     }
                 }
@@ -1109,6 +1151,7 @@ namespace Charts
             {
                 _priceInfoPanel.RemoveSection("MA");
                 _priceInfoPanel.RemoveSection("BOLL");
+                _priceInfoPanel.RemoveSection("BBI");
                 return;
             }
 
@@ -1133,13 +1176,24 @@ namespace Charts
                 {
                     var bbPlaceholders = new List<PriceInfoPanel.InfoLine>
                     {
-                        new PriceInfoPanel.InfoLine { Label = "Up:",  ValueText = "---", ValueBrush = new SolidColorBrush(Color.FromRgb(100,160,255)), ArrowDir = null },
-                        new PriceInfoPanel.InfoLine { Label = "Mid:", ValueText = "---", ValueBrush = new SolidColorBrush(Color.FromRgb(236,210,0)),  ArrowDir = null },
-                        new PriceInfoPanel.InfoLine { Label = "Low:", ValueText = "---", ValueBrush = new SolidColorBrush(Color.FromRgb(100,160,255)), ArrowDir = null }
+                        new PriceInfoPanel.InfoLine { Label = "Up:",  ValueText = "---", ValueBrush = new SolidColorBrush(Color.FromRgb(0xB4,0xB4,0xB4)), ArrowDir = null },
+                        new PriceInfoPanel.InfoLine { Label = "Mid:", ValueText = "---", ValueBrush = new SolidColorBrush(Color.FromRgb(0xD7,0xD4,0xD5)),  ArrowDir = null },
+                        new PriceInfoPanel.InfoLine { Label = "Low:", ValueText = "---", ValueBrush = new SolidColorBrush(Color.FromRgb(0xB4,0xB4,0xB4)), ArrowDir = null }
                     };
                     _priceInfoPanel.SetSection("BOLL", "布林通道", bbPlaceholders);
                 }
                 else _priceInfoPanel.RemoveSection("BOLL");
+
+                bool hasBbi = _overlays.Any(o => o is BbiOverlay);
+                if (hasBbi)
+                {
+                    var bbiPlaceholders = new List<PriceInfoPanel.InfoLine>
+                    {
+                        new PriceInfoPanel.InfoLine { Label = "BBI:", ValueText = "---", ValueBrush = new SolidColorBrush(Color.FromRgb(0xE9,0x1E,0x1F)), ArrowDir = null }
+                    };
+                    _priceInfoPanel.SetSection("BBI", "BBI", bbiPlaceholders);
+                }
+                else _priceInfoPanel.RemoveSection("BBI");
                 return;
             }
             int dataIndex = _hisBars.Count - 1;
@@ -1153,6 +1207,11 @@ namespace Charts
             foreach (var ov in _overlays.Where(o => o.TagName == "布林通道"))
                 bbLines.AddRange(ov.GetInfoLines(dataIndex, prevIndex, _priceDecimalPlaces));
             if (bbLines.Count > 0) _priceInfoPanel.SetSection("BOLL", "布林通道", bbLines); else _priceInfoPanel.RemoveSection("BOLL");
+
+            var bbiLines = new List<PriceInfoPanel.InfoLine>();
+            foreach (var ov in _overlays.Where(o => o.TagName == "BBI"))
+                bbiLines.AddRange(ov.GetInfoLines(dataIndex, prevIndex, _priceDecimalPlaces));
+            if (bbiLines.Count > 0) _priceInfoPanel.SetSection("BBI", "BBI", bbiLines); else _priceInfoPanel.RemoveSection("BBI");
         }
 
         // Export/Import overlays for persistence
@@ -1168,8 +1227,21 @@ namespace Charts
                 else if (ov is BollingerOverlay bb)
                 {
                     var (period, k) = bb.GetParameters();
-                    var (fill, opacity) = bb.GetAppearance();
-                    list.Add(new OverlayConfig { Type = "BOLL", Period = period, K = k, FillHex = ColorToHex(fill), Opacity = opacity });
+                    var (fill, opacity, edge, mid) = bb.GetAppearance();
+                    list.Add(new OverlayConfig
+                    {
+                        Type = "BOLL",
+                        Period = period,
+                        K = k,
+                        FillHex = ColorToHex(fill),
+                        MidColorHex = ColorToHex(mid),
+                        Opacity = opacity,
+                        EdgeColorHex = ColorToHex(edge)
+                    });
+                }
+                else if (ov is BbiOverlay bbi)
+                {
+                    list.Add(new OverlayConfig { Type = "BBI", ColorHex = ColorToHex(bbi.LineColor), BbiPeriodsCsv = string.Join(",", bbi.GetParameters()) });
                 }
             }
             return list;
@@ -1187,10 +1259,32 @@ namespace Charts
                 }
                 else if (c.Type == "BOLL")
                 {
-                    var col = string.IsNullOrEmpty(c.FillHex) ? Color.FromRgb(0x64,0xA0,0xFF) : HexToColor(c.FillHex!);
-                    AddOverlay(new BollingerOverlay(c.Period, c.K, col, c.Opacity));
+                    var fill = string.IsNullOrEmpty(c.FillHex) ? Color.FromRgb(0x64,0xA0,0xFF) : HexToColor(c.FillHex!);
+                    var mid = string.IsNullOrEmpty(c.MidColorHex) ? Color.FromRgb(236, 210, 0) : HexToColor(c.MidColorHex!);
+                    var edge = string.IsNullOrEmpty(c.EdgeColorHex) ? fill : HexToColor(c.EdgeColorHex!);
+                    AddOverlay(new BollingerOverlay(c.Period, c.K, fill, c.Opacity, edge, mid));
+                }
+                else if (c.Type == "BBI")
+                {
+                    var col = string.IsNullOrEmpty(c.ColorHex) ? Color.FromRgb(0xFF,0x8C,0x00) : HexToColor(c.ColorHex!);
+                    var periods = ParseBbiPeriods(c.BbiPeriodsCsv);
+                    if (periods.Length == 0) periods = new[] { 5, 10, 30, 60 };
+                    if (string.IsNullOrEmpty(c.ColorHex)) col = Color.FromRgb(0xE9, 0x1E, 0x1F);
+                    AddOverlay(new BbiOverlay(periods, col));
                 }
             }
+        }
+
+        private static int[] ParseBbiPeriods(string? csv)
+        {
+            if (string.IsNullOrWhiteSpace(csv)) return Array.Empty<int>();
+            var parts = csv.Split(new[] { ',', ' ', ';', '|' }, StringSplitOptions.RemoveEmptyEntries);
+            var list = new List<int>();
+            foreach (var p in parts)
+            {
+                if (int.TryParse(p, out var v) && v > 0) list.Add(v);
+            }
+            return list.ToArray();
         }
 
         private static string ColorToHex(Color c) => string.Format("#{0:X2}{1:X2}{2:X2}", c.R, c.G, c.B);

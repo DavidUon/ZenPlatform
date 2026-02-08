@@ -36,7 +36,7 @@ namespace ZenPlatform.Debug
 
         public static void Send(string message, string debugSession, DebugMessageType colorType = DebugMessageType.Info)
         {
-            _client.SendDebuggerMsg(message, debugSession, colorType);
+            _ = _client.SendDebuggerMsgAsync(message, debugSession, colorType);
         }
 
         public static Task ClearBlockAsync(string debugSession, CancellationToken cancellationToken = default)
