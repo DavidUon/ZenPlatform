@@ -4,6 +4,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="歷史資料驗證" MinWidth="1261" MinHeight="446" SizeToContent="WidthAndHeight"
         WindowStartupLocation="CenterOwner"
+        ResizeMode="NoResize"
         Background="#1E1E1E" Foreground="#E6E6E6"
         ShowInTaskbar="False">
     <Window.Resources>
@@ -308,15 +309,16 @@
                             <ComboBoxItem Content="小型台指" Tag="2"/>
                             <ComboBoxItem Content="微型台指" Tag="3"/>
                         </ComboBox>
+                        <TextBlock VerticalAlignment="Center" Margin="16,0,8,0" FontSize="15" Text="回測精度"/>
+                        <ComboBox x:Name="BacktestPrecisionCombo" MinWidth="140" Margin="0,0,8,0"
+                                  SelectedIndex="0"
+                                  Style="{StaticResource InputComboBoxStyle}">
+                            <ComboBoxItem Content="精確回測" Tag="1"/>
+                            <ComboBoxItem Content="高速回測" Tag="3"/>
+                            <ComboBoxItem Content="超高速回測" Tag="6"/>
+                        </ComboBox>
                     </StackPanel>
 
-                    <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right">
-                        <TextBlock VerticalAlignment="Center" Margin="0,0,8,0" FontSize="15" Text="回測模式"/>
-                        <RadioButton x:Name="ExactBacktestRadio" GroupName="BacktestMode" IsChecked="True" Margin="0,0,10,0"
-                                     VerticalAlignment="Center" FontSize="15" Content="精確回測"/>
-                        <RadioButton x:Name="FastBacktestRadio" GroupName="BacktestMode"
-                                     VerticalAlignment="Center" FontSize="15" Content="快速回測"/>
-                    </StackPanel>
                 </Grid>
 
             </Grid>

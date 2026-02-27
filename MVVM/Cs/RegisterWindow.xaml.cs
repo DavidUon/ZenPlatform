@@ -31,7 +31,10 @@ namespace ZenPlatform
 
         private async void OnRegisterClick(object sender, RoutedEventArgs e)
         {
-            if (string.IsNullOrWhiteSpace(IdTextBox.Text))
+            var normalizedId = IdTextBox.Text.Trim().ToUpperInvariant();
+            IdTextBox.Text = normalizedId;
+
+            if (string.IsNullOrWhiteSpace(normalizedId))
             {
                 MessageBoxWindow.Show(this, "請輸入身分證字號。", "提示");
                 IdTextBox.Focus();
@@ -109,7 +112,7 @@ namespace ZenPlatform
 
             var confirmMessage =
                 "請確認以下資訊是否正確：\n\n" +
-                $"身分證字號：{IdTextBox.Text}\n" +
+                $"身分證字號：{normalizedId}\n" +
                 $"姓名：{NameTextBox.Text}\n" +
                 $"Email：{EmailTextBox.Text}\n" +
                 $"電話：{PhoneTextBox.Text}\n" +
@@ -123,7 +126,7 @@ namespace ZenPlatform
 
             var ok = await _userInfoCtrl.Register(
                 UserInfoCtrl.DefaultTargetUrl,
-                IdTextBox.Text.Trim(),
+                normalizedId,
                 PasswordBox.Password,
                 NameTextBox.Text.Trim(),
                 PhoneTextBox.Text.Trim(),
@@ -140,7 +143,7 @@ namespace ZenPlatform
             }
 
             var loginOk = await _userInfoCtrl.LoginUserAsync(
-                IdTextBox.Text.Trim(),
+                normalizedId,
                 PasswordBox.Password,
                 _programName,
                 _programVersion);
@@ -165,7 +168,10 @@ namespace ZenPlatform
             sendingWindow.WindowStartupLocation = WindowStartupLocation.CenterOwner;
             sendingWindow.Show();
 
-            if (string.IsNullOrWhiteSpace(IdTextBox.Text))
+            var normalizedId = IdTextBox.Text.Trim().ToUpperInvariant();
+            IdTextBox.Text = normalizedId;
+
+            if (string.IsNullOrWhiteSpace(normalizedId))
             {
                 sendingWindow.Close();
                 MessageBoxWindow.Show(this, "請先輸入身分證字號。", "提示");
@@ -173,7 +179,6 @@ namespace ZenPlatform
                 return;
             }
 
-            var normalizedId = IdTextBox.Text.Trim().ToUpperInvariant();
             if (!IsValidTaiwanId(normalizedId))
             {
                 sendingWindow.Close();
@@ -191,7 +196,7 @@ namespace ZenPlatform
                 return;
             }
 
-            var idAvailable = await _userInfoCtrl.CheckRegisterId(UserInfoCtrl.DefaultTargetUrl, IdTextBox.Text.Trim());
+            var idAvailable = await _userInfoCtrl.CheckRegisterId(UserInfoCtrl.DefaultTargetUrl, normalizedId);
             if (!idAvailable)
             {
                 sendingWindow.Close();
@@ -210,7 +215,7 @@ $@"您好，
 
 這是一封由 Magistock 系統寄出的註冊驗證信，用於確認 Email 擁有權。
 
-帳號（身分證字號）：{IdTextBox.Text}
+帳號（身分證字號）：{normalizedId}
 驗證碼：
 
     {code}

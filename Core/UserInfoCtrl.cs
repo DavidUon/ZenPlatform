@@ -34,6 +34,7 @@ namespace ZenPlatform.Core
         private bool _purchaseReminderShown;
         private bool _isProgramStopped;
         private string? _lastUserAccountInfoKey;
+        private bool _startupReloginAttempted;
 
         public event Action<string>? PurchaseReminderNeeded;
         public event Action<bool>? ProgramStoppedChanged;
@@ -75,11 +76,10 @@ namespace ZenPlatform.Core
         private static string ResolveDefaultTargetUrl()
         {
 #if DEBUG
-            var overrideUrl = Environment.GetEnvironmentVariable("ZSERVER_TARGET_URL");
-            if (!string.IsNullOrWhiteSpace(overrideUrl))
-                return overrideUrl.Trim();
-#endif
+            return "ws://127.0.0.1:12362/ws";
+#else
             return "wss://zserver.magistock.com/ws";
+#endif
         }
 
         public void SetBrokerLoginSuccess(bool isSuccess)
@@ -131,30 +131,38 @@ namespace ZenPlatform.Core
         private async Task<bool> StartupInternalAsync(string programName, string programVersion, CancellationToken cancellationToken)
         {
             EnsureFirstRunDate();
+            bool startupOk;
             if (TryLoadSnapshot(out var snapshot) && snapshot != null)
             {
                 var ok = await LoginUserInternalAsync(snapshot.LoginId, snapshot.LoginPassword, programName, programVersion, cancellationToken)
                     .ConfigureAwait(false);
                 if (ok)
                 {
-                    return true;
+                    startupOk = true;
                 }
-
-                if (snapshot.Data != null)
+                else if (snapshot.Data != null)
                 {
                     ApplySnapshotData(snapshot.Data, programName, programVersion);
-                    return true;
+                    startupOk = true;
+                }
+                else
+                {
+                    startupOk = await InitializeGuestAsync(programName, programVersion, cancellationToken).ConfigureAwait(false);
                 }
             }
-
-            return await InitializeGuestAsync(programName, programVersion, cancellationToken).ConfigureAwait(false);
+            else
+            {
+                startupOk = await InitializeGuestAsync(programName, programVersion, cancellationToken).ConfigureAwait(false);
+            }
+            await EnsureAccessAfterStartupAsync(cancellationToken).ConfigureAwait(false);
+            return startupOk;
         }
 
         private void EnsureFirstRunDate()
         {
             try
             {
-                using var key = Registry.LocalMachine.CreateSubKey(RegistryRoot);
+                using var key = Registry.CurrentUser.CreateSubKey(RegistryRoot);
                 if (key == null)
                 {
                     return;
@@ -179,7 +187,7 @@ namespace ZenPlatform.Core
             date = default;
             try
             {
-                using var key = Registry.LocalMachine.OpenSubKey(RegistryRoot);
+                using var key = Registry.CurrentUser.OpenSubKey(RegistryRoot);
                 if (key == null)
                 {
                     return false;
@@ -223,6 +231,46 @@ namespace ZenPlatform.Core
             }
 
             return false;
+        }
+
+        private async Task EnsureAccessAfterStartupAsync(CancellationToken cancellationToken)
+        {
+            // Priority 1: live permission from server.
+            if (TryResolveCurrentPermissionState(out var hasActivePermission))
+            {
+                SetProgramStopped(!hasActivePermission);
+                if (!hasActivePermission)
+                {
+                    ShowPurchaseReminderOnce("您的授權已到期或無效，請重新登入 Magistock 更新權限。");
+                }
+                return;
+            }
+
+            // Priority 2: no login/no live permission -> check trial period.
+            if (!IsTrialExpired())
+            {
+                SetProgramStopped(false);
+                return;
+            }
+
+            // Give one more chance to refresh permission online (for cached user credentials case).
+            if (!_startupReloginAttempted && CanRetryMagistockLogin())
+            {
+                _startupReloginAttempted = true;
+                var reloginOk = await ConnectAndLoginAsync(cancellationToken).ConfigureAwait(false);
+                if (reloginOk && TryResolveCurrentPermissionState(out var reloginPermissionOk))
+                {
+                    SetProgramStopped(!reloginPermissionOk);
+                    if (!reloginPermissionOk)
+                    {
+                        ShowPurchaseReminderOnce("您的授權已到期或無效，請完成續約後重新啟動。\n如果您已經購買過使用權限，請登入 Magistock 帳號獲取權限。");
+                    }
+                    return;
+                }
+            }
+
+            SetProgramStopped(true);
+            ShowPurchaseReminderOnce("您的試用期已超過 30 天且尚未購買。為避免功能受限，請盡快完成購買並啟用授權。完成購買後即可啟用完整下單功能。\n如果您已經購買過使用權限，請登入 Magistock 帳號獲取權限。");
         }
 
         private async Task<bool> ConnectAndLoginAsync(CancellationToken cancellationToken)
@@ -289,6 +337,8 @@ namespace ZenPlatform.Core
         {
             LastUserData = data;
             TryRaiseUserAccountInfoFetched();
+            UpdateProgramStoppedFlag();
+            EvaluatePurchaseReminder();
         }
 
         private void TryRaiseUserAccountInfoFetched()
@@ -352,15 +402,84 @@ namespace ZenPlatform.Core
                 return;
             }
 
+            ShowPurchaseReminderOnce("您的試用期已超過 30 天且尚未購買。為避免功能受限，請盡快完成購買並啟用授權。完成購買後即可啟用完整下單功能。\n如果您已經購買過使用權限，請登入 Magistock 帳號獲取權限。");
+        }
+
+        private void ShowPurchaseReminderOnce(string message)
+        {
+            if (_purchaseReminderShown)
+            {
+                return;
+            }
+
             _purchaseReminderShown = true;
-            PurchaseReminderNeeded?.Invoke("您的試用期已超過 30 天且尚未購買。為避免功能受限，請盡快完成購買並啟用授權。完成購買後即可啟用完整下單功能。");
+            PurchaseReminderNeeded?.Invoke(message);
+        }
+
+        private bool IsTrialExpired()
+        {
+            if (!TryGetFirstRunDate(out var firstRunDate))
+            {
+                return false;
+            }
+
+            return (DateTime.Today - firstRunDate).TotalDays >= TrialDays;
+        }
+
+        private bool CanRetryMagistockLogin()
+        {
+            return !_isGuest &&
+                   !string.IsNullOrWhiteSpace(_loginId) &&
+                   !string.IsNullOrWhiteSpace(_password);
+        }
+
+        private bool TryResolveCurrentPermissionState(out bool hasActivePermission)
+        {
+            hasActivePermission = false;
+            var permission = GetCurrentProgramPermission();
+            if (permission == null)
+            {
+                return false;
+            }
+
+            if (permission.IsBanned)
+            {
+                hasActivePermission = false;
+                return true;
+            }
+
+            if (!HasValidPermission())
+            {
+                hasActivePermission = false;
+                return true;
+            }
+
+            if (permission.UnlimitedExpiry)
+            {
+                hasActivePermission = true;
+                return true;
+            }
+
+            var expireText = permission.ProgramExpireAt ?? string.Empty;
+            if (!DateTime.TryParse(expireText, out var expireDate))
+            {
+                hasActivePermission = false;
+                return true;
+            }
+
+            hasActivePermission = expireDate.Date >= DateTime.Today;
+            return true;
         }
 
         private bool HasValidPermission()
         {
-            var permission = LastUserData?.Permissions?.FirstOrDefault(p =>
-                string.Equals(p.ProgramName, _userInfo?.ProgName, StringComparison.OrdinalIgnoreCase));
+            var permission = GetCurrentProgramPermission();
             if (permission == null)
+            {
+                return false;
+            }
+
+            if (permission.IsBanned)
             {
                 return false;
             }
@@ -373,28 +492,30 @@ namespace ZenPlatform.Core
             return permission.PermissionCount > 0;
         }
 
+        private PermissionData? GetCurrentProgramPermission()
+        {
+            return LastUserData?.Permissions?.FirstOrDefault(p =>
+                string.Equals(p.ProgramName, _userInfo?.ProgName, StringComparison.OrdinalIgnoreCase));
+        }
+
         private void UpdateProgramStoppedFlag()
         {
-            var permission = LastUserData?.Permissions?.FirstOrDefault(p =>
-                string.Equals(p.ProgramName, _userInfo?.ProgName, StringComparison.OrdinalIgnoreCase));
-            if (permission == null)
+            if (!TryResolveCurrentPermissionState(out var hasActivePermission))
             {
                 return;
             }
 
-            if (permission.UnlimitedExpiry)
+            SetProgramStopped(!hasActivePermission);
+            if (!hasActivePermission)
             {
-                SetProgramStopped(false);
-                return;
-            }
-
-            var expireText = permission.ProgramExpireAt ?? string.Empty;
-            if (DateTime.TryParse(expireText, out var expireDate))
-            {
-                if (expireDate.Date >= DateTime.Today)
+                var permission = GetCurrentProgramPermission();
+                if (permission?.IsBanned == true)
                 {
-                    SetProgramStopped(false);
+                    ShowPurchaseReminderOnce("您的帳號目前已停用，請聯絡客服確認授權狀態。");
+                    return;
                 }
+
+                ShowPurchaseReminderOnce("您的授權已到期或無效，請重新登入 Magistock 更新權限。\n如果您已經購買過使用權限，請登入 Magistock 帳號獲取權限。");
             }
         }
 

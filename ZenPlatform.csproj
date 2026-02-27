@@ -1,6 +1,8 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
+    <AssemblyName>TxNo2</AssemblyName>
+    <ApplicationIcon>MVVM/Assets/TxNo2.ico</ApplicationIcon>
     <TargetFramework>net8.0-windows</TargetFramework>
     <UseWPF>true</UseWPF>
     <Nullable>enable</Nullable>
@@ -8,6 +10,7 @@
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+    <SatelliteResourceLanguages>zh-Hant</SatelliteResourceLanguages>
   </PropertyGroup>
 
   <ItemGroup>
@@ -106,12 +109,21 @@
       <LastGenOutput>Resources.Designer.cs</LastGenOutput>
     </EmbeddedResource>
     <Resource Include="MVVM\Assets\LineCode.png" />
+    <Resource Include="MVVM\Assets\LouCode.jpg" />
+    <Resource Include="MVVM\Assets\question.png" />
     <None Update="Properties\Settings.settings">
       <Generator>SettingsSingleFileGenerator</Generator>
       <LastGenOutput>Settings.Designer.cs</LastGenOutput>
     </None>
     <None Include="App.config" />
   </ItemGroup>
+
+  <Target Name="RemovePublishPdb" AfterTargets="Publish">
+    <ItemGroup>
+      <PublishedPdbFiles Include="$(PublishDir)**\*.pdb" />
+    </ItemGroup>
+    <Delete Files="@(PublishedPdbFiles)" />
+  </Target>
 
   <ItemGroup>
     <Folder Include="Strategy\" />

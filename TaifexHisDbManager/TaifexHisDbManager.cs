@@ -18,7 +18,7 @@ namespace TaifexHisDbManager
             _launcher.ShowMaintenance(_owner);
         }
 
-        public (bool Accepted, DateTime? Start, DateTime? End, int PreloadDays, BacktestMode Mode, BacktestProduct Product) GetBackTestInfo()
+        public (bool Accepted, DateTime? Start, DateTime? End, int PreloadDays, BacktestProduct Product, BacktestPrecision Precision) GetBackTestInfo()
         {
             return _launcher.ShowDateRange(_owner);
         }

@@ -5,7 +5,8 @@
         WindowStartupLocation="CenterOwner"
         SizeToContent="WidthAndHeight"
         Background="{StaticResource BrushWindowBackground}"
-        Foreground="{StaticResource BrushText}">
+        Foreground="{StaticResource BrushText}"
+        ShowInTaskbar="False">
     <StackPanel Margin="20" HorizontalAlignment="Center">
         <Border BorderBrush="{StaticResource BrushBorder}"
                 BorderThickness="1"

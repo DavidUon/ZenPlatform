@@ -194,6 +194,10 @@ namespace ZenPlatform.Core
             }
 
             _stalledRaised = true;
+            if (_priceManager.CurrentSource == PriceManager.PriceSource.Network)
+            {
+                _requestResubscribe();
+            }
             PriceStalled?.Invoke(new PriceStallInfo(
                 _lastChangeAt.Value,
                 _lastDdeAt,

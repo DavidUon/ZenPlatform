@@ -1,0 +1,40 @@
+<Window x:Class="ZenPlatform.EditStopLossBaselineWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="更改停損基準線"
+        Width="380"
+        SizeToContent="Height"
+        WindowStartupLocation="CenterOwner"
+        Background="{StaticResource BrushWindowBackground}"
+        Foreground="{StaticResource BrushText}"
+        ShowInTaskbar="False">
+    <Grid Margin="16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="8" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="8" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="8" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="16" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <TextBlock x:Name="HeaderText" />
+        <TextBlock Grid.Row="2" x:Name="CurrentPriceText" />
+        <TextBlock Grid.Row="4" x:Name="CurrentBaselineText" />
+        <StackPanel Grid.Row="6" Orientation="Horizontal" VerticalAlignment="Center">
+            <TextBlock Text="新停損基準線：" VerticalAlignment="Center" />
+            <TextBox x:Name="BaselineInput"
+                     Width="120"
+                     Margin="8,0,0,0"
+                     VerticalContentAlignment="Center" />
+        </StackPanel>
+
+        <StackPanel Grid.Row="8" Orientation="Horizontal" HorizontalAlignment="Right">
+            <Button Content="取消" Margin="0,0,8,0" Click="OnCancelClick" />
+            <Button Content="套用" Click="OnApplyClick" />
+        </StackPanel>
+    </Grid>
+</Window>

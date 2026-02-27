@@ -2,7 +2,8 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="技術指標" SizeToContent="WidthAndHeight" ResizeMode="NoResize" WindowStartupLocation="CenterOwner"
-        Background="#000000">
+        Background="#000000"
+        ShowInTaskbar="False">
     <Window.Resources>
         <Style TargetType="TextBlock">
             <Setter Property="Foreground" Value="White"/>
@@ -31,10 +32,13 @@
             <CheckBox x:Name="CbMa"   Content="均線" />
             <CheckBox x:Name="CbBbi"  Content="BBI 指標" />
             <CheckBox x:Name="CbBoll" Content="布林通道"   />
+            <CheckBox x:Name="CbSar" Content="SAR 指標" />
             <Separator Margin="0,10,0,10"/>
             <CheckBox x:Name="CbVol"  Content="成交量" />
             <CheckBox x:Name="CbKd"   Content="KD 指標"    />
             <CheckBox x:Name="CbMacd" Content="MACD 指標" />
+            <CheckBox x:Name="CbAtr" Content="ATR 指標" />
+            <CheckBox x:Name="CbHa" Content="HA 裁縫線" />
         </StackPanel>
     </Grid>
 </Window>

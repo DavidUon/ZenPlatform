@@ -40,9 +40,7 @@ namespace ZenPlatform.Core.Exchanges
             _specialOpenDays.Clear();
 
             if (!File.Exists(_csvPath))
-            {
-                CreateDefaultTradingCalendarFile(_csvPath);
-            }
+                return;
 
             foreach (var line in File.ReadLines(_csvPath))
             {
@@ -71,27 +69,5 @@ namespace ZenPlatform.Core.Exchanges
             }
         }
 
-        private static void CreateDefaultTradingCalendarFile(string csvPath)
-        {
-            var content = "" +
-                          "# 市場開休市設定檔\n" +
-                          "# 格式: YYYY-MM-DD,狀態,註解\n" +
-                          "# 狀態: '開市' 或 '休市'\n" +
-                          "\n" +
-                          "2025-01-01,休市,元旦\n" +
-                          "2025-02-28,休市,和平紀念日\n" +
-                          "2025-04-04,休市,兒童節及清明節\n" +
-                          "2025-05-01,休市,勞動節\n" +
-                          "2025-10-10,休市,國慶日\n";
-
-            try
-            {
-                File.WriteAllText(csvPath, content, System.Text.Encoding.UTF8);
-            }
-            catch
-            {
-                // Ignore file creation failures and rely on weekend rules.
-            }
-        }
     }
 }

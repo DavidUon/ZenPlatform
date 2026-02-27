@@ -1,11 +1,5 @@
 namespace TaifexHisDbManager
 {
-    public enum BacktestMode
-    {
-        Exact,
-        Fast
-    }
-
     public enum BacktestProduct
     {
         Tx = 1,

@@ -14,15 +14,6 @@ namespace ZenPlatform.SessionManager.Backtest
             int Event,
             int ContractMonth);
 
-        public sealed record BacktestBar1m(
-            DateTime EndTime,
-            decimal Open,
-            decimal High,
-            decimal Low,
-            decimal Close,
-            int Volume,
-            int Event);
-
         public static class ProductCode
         {
             public const int Tx = 1;  // 大型台指
@@ -97,79 +88,6 @@ namespace ZenPlatform.SessionManager.Backtest
                 {
                     yield return batch;
                     batch = new List<BacktestTick>(batchSize);
-                }
-            }
-
-            if (batch.Count > 0)
-            {
-                yield return batch;
-            }
-        }
-
-        public IEnumerable<BacktestBar1m> ReadBars1m(int product, DateTime start, DateTime end)
-        {
-            if (start > end)
-            {
-                yield break;
-            }
-
-            long startTs = ToUnixSeconds(start);
-            long endTs = ToUnixSeconds(end);
-
-            foreach (var dbPath in EnumerateDbFiles(start, end))
-            {
-                if (!File.Exists(dbPath))
-                {
-                    continue;
-                }
-
-                using var connection = new SqliteConnection($"Data Source={dbPath}");
-                connection.Open();
-                using var cmd = connection.CreateCommand();
-                cmd.CommandText = "SELECT ts, open, high, low, close, volume, event FROM bars_1m WHERE product = @product AND ts BETWEEN @start AND @end ORDER BY ts ASC;";
-
-                cmd.Parameters.AddWithValue("@product", product);
-                cmd.Parameters.AddWithValue("@start", startTs);
-                cmd.Parameters.AddWithValue("@end", endTs);
-
-                using var reader = cmd.ExecuteReader();
-                while (reader.Read())
-                {
-                    long ts = reader.GetInt64(0);
-                    var open = Convert.ToDecimal(reader.GetDouble(1));
-                    var high = Convert.ToDecimal(reader.GetDouble(2));
-                    var low = Convert.ToDecimal(reader.GetDouble(3));
-                    var close = Convert.ToDecimal(reader.GetDouble(4));
-                    int volume = reader.GetInt32(5);
-                    int ev = reader.GetInt32(6);
-
-                    yield return new BacktestBar1m(
-                        FromUnixSeconds(ts),
-                        open,
-                        high,
-                        low,
-                        close,
-                        volume,
-                        ev);
-                }
-            }
-        }
-
-        public IEnumerable<List<BacktestBar1m>> ReadBar1mBatches(int product, DateTime start, DateTime end, int batchSize = 10000)
-        {
-            if (batchSize <= 0)
-            {
-                throw new ArgumentOutOfRangeException(nameof(batchSize));
-            }
-
-            var batch = new List<BacktestBar1m>(batchSize);
-            foreach (var bar in ReadBars1m(product, start, end))
-            {
-                batch.Add(bar);
-                if (batch.Count >= batchSize)
-                {
-                    yield return batch;
-                    batch = new List<BacktestBar1m>(batchSize);
                 }
             }
 
@@ -318,84 +236,6 @@ LIMIT @limit;".Trim();
 
             // matches are collected in descending order.
             return matches[preloadDays - 1];
-        }
-
-        public long CountBars1m(int product, DateTime start, DateTime end)
-        {
-            if (start > end)
-            {
-                return 0;
-            }
-
-            long startTs = ToUnixSeconds(start);
-            long endTs = ToUnixSeconds(end);
-            long total = 0;
-
-            foreach (var dbPath in EnumerateDbFiles(start, end))
-            {
-                if (!File.Exists(dbPath))
-                {
-                    continue;
-                }
-
-                using var connection = new SqliteConnection($"Data Source={dbPath}");
-                connection.Open();
-                using var cmd = connection.CreateCommand();
-                cmd.CommandText = "SELECT COUNT(*) FROM bars_1m WHERE product = @product AND ts BETWEEN @start AND @end;";
-
-                cmd.Parameters.AddWithValue("@product", product);
-                cmd.Parameters.AddWithValue("@start", startTs);
-                cmd.Parameters.AddWithValue("@end", endTs);
-
-                var count = cmd.ExecuteScalar();
-                if (count != null && count != System.DBNull.Value)
-                {
-                    total += System.Convert.ToInt64(count);
-                }
-            }
-
-            return total;
-        }
-
-        public (DateTime? Min, DateTime? Max) GetBarRange1m(int product)
-        {
-            DateTime? min = null;
-            DateTime? max = null;
-
-            foreach (var dbPath in EnumerateDbFilesForAllYears())
-            {
-                if (!File.Exists(dbPath))
-                {
-                    continue;
-                }
-
-                using var connection = new SqliteConnection($"Data Source={dbPath}");
-                connection.Open();
-                using var cmd = connection.CreateCommand();
-                cmd.CommandText = "SELECT MIN(ts), MAX(ts) FROM bars_1m WHERE product = @product;";
-                cmd.Parameters.AddWithValue("@product", product);
-
-                using var reader = cmd.ExecuteReader();
-                if (!reader.Read())
-                {
-                    continue;
-                }
-
-                if (!reader.IsDBNull(0))
-                {
-                    var ts = reader.GetInt64(0);
-                    var dt = FromUnixSeconds(ts);
-                    if (min == null || dt < min.Value) min = dt;
-                }
-                if (!reader.IsDBNull(1))
-                {
-                    var ts = reader.GetInt64(1);
-                    var dt = FromUnixSeconds(ts);
-                    if (max == null || dt > max.Value) max = dt;
-                }
-            }
-
-            return (min, max);
         }
 
         private IEnumerable<string> EnumerateDbFiles(DateTime start, DateTime end)

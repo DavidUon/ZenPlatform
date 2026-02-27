@@ -3,17 +3,27 @@ using System.Runtime.InteropServices;
 using System.Windows;
 using System.Collections.Concurrent;
 using System.Threading;
+using System.Text;
 
 namespace ZenPlatform.Utility
 {
     public static class ConsoleLog
     {
-        private const int SwpNoZOrder = 0x0004;
         private const int SwpNoActivate = 0x0010;
+        private const int SwpFrameChanged = 0x0020;
         private const int SwShow = 5;
+        private static readonly IntPtr HwndTopMost = new(-1);
         private const int StdInputHandle = -10;
-        private const int EnableQuickEdit = 0x0040;
+        private const int GwlStyle = -16;
+        private const int WsCaption = 0x00C00000;
+        private const int WsThickFrame = 0x00040000;
+        private const int WsSysMenu = 0x00080000;
+        private const int WsMinimizeBox = 0x00020000;
+        private const int WsMaximizeBox = 0x00010000;
+        private const int EnableQuickEditFlag = 0x0040;
         private const int EnableExtendedFlags = 0x0080;
+        private const int EnableInsertMode = 0x0020;
+        private const uint Utf8CodePage = 65001;
 
         private static bool _enabled;
         private static bool _streamsBound;
@@ -37,6 +47,12 @@ namespace ZenPlatform.Utility
         [DllImport("user32.dll", SetLastError = true)]
         private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
 
+        [DllImport("user32.dll", SetLastError = true)]
+        private static extern int GetWindowLong(IntPtr hWnd, int nIndex);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        private static extern int SetWindowLong(IntPtr hWnd, int nIndex, int dwNewLong);
+
         [DllImport("kernel32.dll", SetLastError = true)]
         private static extern IntPtr GetStdHandle(int nStdHandle);
 
@@ -45,6 +61,12 @@ namespace ZenPlatform.Utility
 
         [DllImport("kernel32.dll", SetLastError = true)]
         private static extern bool SetConsoleMode(IntPtr hConsoleHandle, int mode);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        private static extern bool SetConsoleOutputCP(uint wCodePageID);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        private static extern bool SetConsoleCP(uint wCodePageID);
 
         public static bool Enabled => _enabled;
 
@@ -63,14 +85,15 @@ namespace ZenPlatform.Utility
 
                 if (!_streamsBound)
                 {
+                    ConfigureUtf8Console();
                     var stdout = Console.OpenStandardOutput();
-                    var writer = new System.IO.StreamWriter(stdout) { AutoFlush = true };
+                    var writer = new System.IO.StreamWriter(stdout, new UTF8Encoding(false)) { AutoFlush = true };
                     Console.SetOut(writer);
                     Console.SetError(writer);
                     _streamsBound = true;
                 }
 
-                DisableQuickEdit();
+                EnableQuickEdit();
                 EnsureWorker();
 
                 if (!string.IsNullOrWhiteSpace(title))
@@ -81,15 +104,30 @@ namespace ZenPlatform.Utility
                 var hwnd = GetConsoleWindow();
                 if (hwnd == IntPtr.Zero)
                 {
-                    return false;
+                    Thread.Sleep(50);
+                    hwnd = GetConsoleWindow();
+                    if (hwnd == IntPtr.Zero)
+                    {
+                        return false;
+                    }
                 }
 
                 ShowWindow(hwnd, SwShow);
-                var width = Math.Max(200, (int)Math.Round(screenRect.Width * 2));
-                var x = (int)Math.Round(screenRect.X + screenRect.Width - width);
+                var style = GetWindowLong(hwnd, GwlStyle);
+                if (style != 0)
+                {
+                    style &= ~WsCaption;
+                    style &= ~WsThickFrame;
+                    style &= ~WsSysMenu;
+                    style &= ~WsMinimizeBox;
+                    style &= ~WsMaximizeBox;
+                    SetWindowLong(hwnd, GwlStyle, style);
+                }
+                var width = Math.Max(200, (int)Math.Round(screenRect.Width));
+                var x = (int)Math.Round(screenRect.X);
                 var y = (int)Math.Round(screenRect.Y);
                 var height = Math.Max(120, (int)Math.Round(screenRect.Height));
-                SetWindowPos(hwnd, IntPtr.Zero, x, y, width, height, SwpNoZOrder | SwpNoActivate);
+                SetWindowPos(hwnd, HwndTopMost, x, y, width, height, SwpNoActivate | SwpFrameChanged);
                 return true;
             }
             catch
@@ -118,7 +156,34 @@ namespace ZenPlatform.Utility
             _streamsBound = false;
         }
 
-        private static void DisableQuickEdit()
+        public static void UpdateBounds(Rect screenRect)
+        {
+            if (!_enabled)
+            {
+                return;
+            }
+
+            try
+            {
+                var hwnd = GetConsoleWindow();
+                if (hwnd == IntPtr.Zero)
+                {
+                    return;
+                }
+
+                var width = Math.Max(200, (int)Math.Round(screenRect.Width));
+                var x = (int)Math.Round(screenRect.X);
+                var y = (int)Math.Round(screenRect.Y);
+                var height = Math.Max(120, (int)Math.Round(screenRect.Height));
+                SetWindowPos(hwnd, HwndTopMost, x, y, width, height, SwpNoActivate);
+            }
+            catch
+            {
+                // ignore reposition failure
+            }
+        }
+
+        private static void EnableQuickEdit()
         {
             var handle = GetStdHandle(StdInputHandle);
             if (handle == IntPtr.Zero)
@@ -132,9 +197,25 @@ namespace ZenPlatform.Utility
             }
 
             var newMode = mode;
-            newMode &= ~EnableQuickEdit;
             newMode |= EnableExtendedFlags;
+            newMode |= EnableQuickEditFlag;
+            newMode |= EnableInsertMode;
             SetConsoleMode(handle, newMode);
+        }
+
+        private static void ConfigureUtf8Console()
+        {
+            try
+            {
+                SetConsoleOutputCP(Utf8CodePage);
+                SetConsoleCP(Utf8CodePage);
+                Console.InputEncoding = Encoding.UTF8;
+                Console.OutputEncoding = Encoding.UTF8;
+            }
+            catch
+            {
+                // Best-effort: keep console usable even if encoding setup fails.
+            }
         }
 
         public static void WriteLine(string message)

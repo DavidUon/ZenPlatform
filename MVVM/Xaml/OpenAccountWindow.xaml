@@ -1,0 +1,28 @@
+<Window x:Class="ZenPlatform.OpenAccountWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="我要開戶"
+        WindowStartupLocation="CenterOwner"
+        SizeToContent="WidthAndHeight"
+        Background="{StaticResource BrushWindowBackground}"
+        Foreground="{StaticResource BrushText}"
+        ShowInTaskbar="False">
+    <StackPanel Margin="20" HorizontalAlignment="Center">
+        <Border BorderBrush="{StaticResource BrushBorder}"
+                BorderThickness="1"
+                Background="{StaticResource BrushWindowBackground}"
+                Padding="10"
+                HorizontalAlignment="Center">
+            <Image Source="pack://application:,,,/MVVM/Assets/LouCode.jpg"
+                   Width="320"
+                   Height="320"
+                   Stretch="Uniform"/>
+        </Border>
+        <TextBlock Text="請洽康和期貨營業員開戶"
+                   Margin="0,16,0,0"
+                   FontSize="15"
+                   Foreground="#FFFFFFFF"
+                   HorizontalAlignment="Center"
+                   TextAlignment="Center"/>
+    </StackPanel>
+</Window>

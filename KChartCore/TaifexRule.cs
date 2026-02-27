@@ -30,7 +30,7 @@ namespace KChartCore
             try
             {
                 var calendarPath = string.IsNullOrWhiteSpace(tradingCalendarPath)
-                    ? Path.Combine(AppContext.BaseDirectory, "台灣國定假日定義.txt")
+                    ? ResolveDefaultTradingCalendarPath()
                     : tradingCalendarPath;
                 _tradingCalendar = new TradingCalendar(calendarPath);
             }
@@ -38,6 +38,17 @@ namespace KChartCore
             {
                 // Ignore calendar load failures and fall back to base schedule.
             }
+        }
+
+        private static string ResolveDefaultTradingCalendarPath()
+        {
+            var baseDir = Path.GetFullPath(AppContext.BaseDirectory);
+            var installDir = baseDir.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            var installParent = Directory.GetParent(installDir)?.FullName;
+            var libRoot = string.IsNullOrWhiteSpace(installParent)
+                ? Path.Combine(installDir, "Magistock資料庫")
+                : Path.Combine(installParent, "Magistock資料庫");
+            return Path.Combine(libRoot, "行事曆", "台灣國定假日定義.txt");
         }
 
         public string MarketName => "台灣期貨交易所";
@@ -108,13 +119,14 @@ namespace KChartCore
 
             DateTime today = time.Date;
             DateTime yesterday = today.AddDays(-1);
-
-            return segment switch
+            var result = segment switch
             {
                 1 => _tradingCalendar.IsTradingDay(yesterday),     // 第一段：檢查昨天是否假日
                 2 or 3 => _tradingCalendar.IsTradingDay(today),   // 第二段、第三段：檢查今天是否假日
                 _ => false
             };
+
+            return result;
         }
 
         /// <summary>
@@ -172,12 +184,17 @@ namespace KChartCore
         /// </summary>
         public bool IsSealKbar(DateTime time)
         {
-            // 收盤時間特殊處理：使用 TradingSessions 定義的結束時間
+            // 收盤時間特殊處理：只在「實際交易邊界」允許封棒，避免休市時誤封棒
             foreach (var session in TradingSessions)
             {
                 if (time.TimeOfDay == session.EndTime)
                 {
-                    return true; // 收盤時間必須封棒
+                    var oneMinuteAgo = time.AddMinutes(-1);
+                    if (IsMarketOpen(time) || IsMarketOpen(oneMinuteAgo))
+                    {
+                        return true;
+                    }
+                    return false;
                 }
             }
 

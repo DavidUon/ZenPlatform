@@ -14,13 +14,13 @@ namespace TaifexHisDbManager
     internal partial class ImportRunWindow : Window
     {
         private string? _sourceFolder;
-        private readonly string _dbOutputFolder;
         private readonly string _settingsPath = Path.Combine(AppContext.BaseDirectory, "import_settings.json");
 
         public ImportRunWindow(string dbOutputFolder)
         {
             InitializeComponent();
-            _dbOutputFolder = dbOutputFolder;
+            _ = dbOutputFolder; // 保留既有呼叫介面，實際輸出路徑統一由系統資料庫根目錄推導
+            MagistockStoragePaths.EnsureFolders();
             LoadLastFolder();
         }
 
@@ -54,13 +54,17 @@ namespace TaifexHisDbManager
             StartImportButton.IsEnabled = false;
             LogTextBox.Clear();
             LogLine("開始匯入...");
+            LogLine($"系統資料庫根目錄：{MagistockStoragePaths.RootFolder}");
             ImportProgressBar.Value = 0;
             ImportProgressBar.Visibility = Visibility.Visible;
+            var importSucceeded = false;
 
             try
             {
-                await Task.Run(() => ImportFromFolder(_sourceFolder, _dbOutputFolder));
+                var dbOutputFolder = MagistockStoragePaths.MagistockLibPath;
+                await Task.Run(() => ImportFromFolder(_sourceFolder, dbOutputFolder));
                 LogLine("完成。");
+                importSucceeded = true;
             }
             catch (Exception ex)
             {
@@ -69,12 +73,16 @@ namespace TaifexHisDbManager
             finally
             {
                 StartImportButton.IsEnabled = true;
+                if (importSucceeded)
+                {
+                    Close();
+                }
             }
         }
 
         private void ImportFromFolder(string sourceFolder, string dbOutputFolder)
         {
-            string tempCsvFolder = Path.Combine(AppContext.BaseDirectory, "CsvTemp");
+            string tempCsvFolder = MagistockStoragePaths.CsvTempFolder;
             var dbPool = new Dictionary<int, YearDatabase>();
             try
             {
@@ -178,7 +186,7 @@ namespace TaifexHisDbManager
                     }
                 }
 
-                string archivedFolder = Path.Combine(sourceFolder, "已匯入");
+                string archivedFolder = MagistockStoragePaths.ImportedFolder;
                 Directory.CreateDirectory(archivedFolder);
                 foreach (string csvFile in csvFilesInSource)
                 {
@@ -222,6 +230,9 @@ namespace TaifexHisDbManager
         {
             try
             {
+                _sourceFolder = MagistockStoragePaths.DownloadZipFolder;
+                SourceFolderTextBox.Text = _sourceFolder;
+
                 if (!File.Exists(_settingsPath))
                     return;
 
@@ -230,8 +241,12 @@ namespace TaifexHisDbManager
                 if (settings == null || string.IsNullOrWhiteSpace(settings.SourceFolder))
                     return;
 
-                _sourceFolder = settings.SourceFolder.Trim();
-                SourceFolderTextBox.Text = _sourceFolder;
+                var saved = settings.SourceFolder.Trim();
+                if (!string.IsNullOrWhiteSpace(saved) && Directory.Exists(saved))
+                {
+                    _sourceFolder = saved;
+                    SourceFolderTextBox.Text = _sourceFolder;
+                }
             }
             catch
             {

@@ -13,7 +13,7 @@ namespace ZenPlatform.LogText
     public class LogCtrl
     {
         private const int DefaultMaxLines = 5000;
-        private const int FlushIntervalMs = 1000;
+        private const int FlushIntervalMs = 100;
         private const int MaxBatchSize = 200;
         private const int MaxUiLines = 5000;
         private RichTextBox? _target;
@@ -35,6 +35,7 @@ namespace ZenPlatform.LogText
             _lastEntryTime = null;
             _lastEntryText = null;
             _target.Document.PageWidth = 8192;
+            _target.Document.PagePadding = new Thickness(8, 0, 0, 8);
             EnsureTimer();
         }
 
@@ -205,12 +206,26 @@ namespace ZenPlatform.LogText
             _lastEntryText = null;
             while (_pending.TryDequeue(out _)) { }
             _target.BeginChange();
-            var paragraph = new Paragraph { Margin = new Thickness(0) };
             foreach (var entry in entries)
             {
-                AppendLineFast(paragraph, entry);
+                if (_lastEntryTime.HasValue &&
+                    (entry.Time - _lastEntryTime.Value) > TimeSpan.FromMinutes(1))
+                {
+                    _target.Document.Blocks.Add(new Paragraph(new Run("")) { Margin = new Thickness(0) });
+                }
+
+                var paragraph = new Paragraph { Margin = new Thickness(0) };
+                AppendTextRuns(paragraph, entry);
+                paragraph.Inlines.Add(new Run("   "));
+                paragraph.Inlines.Add(new Run($"{entry.Time:MM/dd HH:mm:ss}")
+                {
+                    Foreground = new SolidColorBrush(Color.FromRgb(130, 130, 130)),
+                    FontSize = 12
+                });
+                _target.Document.Blocks.Add(paragraph);
+                _lastEntryTime = entry.Time;
+                _lastEntryText = entry.Text;
             }
-            _target.Document.Blocks.Add(paragraph);
             _target.EndChange();
             _target.ScrollToEnd();
         }
@@ -419,6 +434,7 @@ namespace ZenPlatform.LogText
                 LogTxtColor.黃色 => new SolidColorBrush(Color.FromRgb(245, 200, 66)),
                 LogTxtColor.藍色 => new SolidColorBrush(Color.FromRgb(80, 160, 255)),
                 LogTxtColor.紅色 => new SolidColorBrush(Color.FromRgb(220, 60, 60)),
+                LogTxtColor.綠色 => new SolidColorBrush(Color.FromRgb(80, 220, 120)),
                 _ => Brushes.Black
             };
         }

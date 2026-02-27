@@ -35,8 +35,10 @@ namespace ZenPlatform.Core
         public bool IsDdeQuoteAvailable => DdePrice.IsQuoteAvailable;
 
         public string ProgramName => "台指二號";
-        public string Version1 => "V2.0.0";
-        public string Version2 => "(beta)";
+        // 安裝包版本號（例如 V2.0.3），供更新機制比較版本先後。
+        public string BuildSerial => "V2.0.3";
+        public string Version1 => BuildSerial;
+        public string Version2 => "";
         public bool IsProgramStopped => ClientCtrl.IsProgramStopped;
         public bool IsBrokerConnected { get; private set; }
         public bool IsBrokerLoginSuccess => ClientCtrl.IsBrokerLoginSuccess;
@@ -59,6 +61,15 @@ namespace ZenPlatform.Core
 
         public Core()
         {
+            try
+            {
+                TaifexHisDbManager.MagistockStoragePaths.EnsureInitialized();
+            }
+            catch
+            {
+                // Best-effort initialization; downstream logic falls back to weekend rule if needed.
+            }
+
             // 使用者登入/權限/帳號資料
             ClientCtrl = new UserInfoCtrl(Client);
             // 交易所時間與開盤狀態
@@ -77,6 +88,7 @@ namespace ZenPlatform.Core
             MainLog = new LogModel();
             // 交易控制 Gate
             TradeCtrl = new TradeCtrl();
+            TradeCtrl.BindBroker(Broker);
             // 報價/時間轉送到 KChartCore
             ChartBridge = new KChartBridge();
             // 多策略管理器
@@ -87,6 +99,10 @@ namespace ZenPlatform.Core
                 manager.RegisterKBarPeriod = period => ChartBridge.RegisterPeriod(period);
                 manager.UnregisterKBarPeriod = period => ChartBridge.UnregisterPeriod(period);
                 manager.IsHistoryReady = () => ChartBridge.HistoryReady;
+                manager.GetCurrentContract = () => (CurContract, ContractYear, ContractMonth);
+                manager.ResolveContractPrice = ResolveContractPrice;
+                manager.SwitchContract = SetContract;
+                manager.SessionTradeFailed += OnSessionTradeFailed;
             }
             SessionManager.SessionStateStore.LoadAll(SessionManagers);
             foreach (var manager in SessionManagers)
@@ -121,7 +137,11 @@ namespace ZenPlatform.Core
                 () => (CurContract, ContractYear, ContractMonth),
                 () => TimeCtrl.IsMarketOpenNow,
                 () => IsDdeConnected,
-                UpdatePriceSubscription);
+                () =>
+                {
+                    PriceManager.ResetNetworkSubscription();
+                    UpdatePriceSubscription();
+                });
             DdePrice.OnDdePrice += OnDdePrice;
             DdePrice.QuoteStatusChanged += _ => OnPropertyChanged(nameof(IsDdeQuoteAvailable));
             DdeService.ConnectionLost += OnDdeConnectionLost;
@@ -160,7 +180,7 @@ namespace ZenPlatform.Core
             Client.PriceUpdateReceived += OnNetworkPriceUpdate;
             Client.Reconnected += OnClientReconnected;
             ClientCtrl.LoginStateChanged += UpdatePriceSubscription;
-            ClientCtrl.ProgramStoppedChanged += _ => OnPropertyChanged(nameof(IsProgramStopped));
+            ClientCtrl.ProgramStoppedChanged += OnProgramStoppedChanged;
             ClientCtrl.UserAccountInfoFetched += OnUserAccountInfoFetched;
             Broker.OnBrokerNotify += OnBrokerNotify;
             TimeCtrl.MarketOpenChanged += OnMarketOpenChanged;
@@ -189,6 +209,31 @@ namespace ZenPlatform.Core
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
         }
 
+        private void OnProgramStoppedChanged(bool stopped)
+        {
+            OnPropertyChanged(nameof(IsProgramStopped));
+            if (!stopped)
+            {
+                return;
+            }
+
+            _ = PriceManager.StopAsync();
+            while (_queue.TryDequeue(out _))
+            {
+            }
+
+            foreach (var manager in SessionManagers)
+            {
+                if (!manager.IsStrategyRunning)
+                {
+                    continue;
+                }
+
+                manager.Log.Add("授權已停用，策略自動停止");
+                manager.StopStrategySilently();
+            }
+        }
+
         private void OnMarketOpenChanged(object? sender, bool isOpen)
         {
             IsMarketOpen = isOpen;
@@ -197,6 +242,7 @@ namespace ZenPlatform.Core
 
         private void OnDdePrice(string productName, string fieldName, int year, int month, string data, bool isRequest)
         {
+            PriceManager.NotifyDdeTick();
             EnqueueQuote(productName, fieldName, year, month, data, isRequest, TimeCtrl.ExchangeTime, QuoteSource.Dde);
         }
 
@@ -204,6 +250,9 @@ namespace ZenPlatform.Core
 
         private void OnTimeTick(object? sender, DateTime time)
         {
+            // Drive quote source state machine (debounce/stale checks) on a fixed cadence.
+            UpdatePriceSubscription();
+
             var stamp = new DateTime(time.Year, time.Month, time.Day, time.Hour, time.Minute, time.Second, time.Kind);
             if (_lastQueueSecond == null || _lastQueueSecond.Value != stamp)
             {
@@ -217,6 +266,10 @@ namespace ZenPlatform.Core
             if (string.IsNullOrWhiteSpace(info.Permission.BrokerPassword) ||
                 string.IsNullOrWhiteSpace(info.Permission.Account))
             {
+                foreach (var manager in SessionManagers)
+                {
+                    manager.Log.Add("期貨商自動登入略過：缺少期貨帳號或期貨密碼。");
+                }
                 return;
             }
 
@@ -238,6 +291,25 @@ namespace ZenPlatform.Core
             {
                 ClientCtrl.SetBrokerLoginSuccess(false);
                 OnPropertyChanged(nameof(IsBrokerLoginSuccess));
+
+                var market = type == BrokerNotifyType.DomesticLoginFailed ? "國內" : "國外";
+                var text = string.IsNullOrWhiteSpace(message)
+                    ? $"期貨商登入失敗({market})"
+                    : $"期貨商登入失敗({market})：{message}";
+                foreach (var manager in SessionManagers)
+                {
+                    manager.Log.Add(text, text, ZenPlatform.LogText.LogTxtColor.黃色);
+
+                    if (!string.IsNullOrWhiteSpace(message) && message.Contains('|'))
+                    {
+                        var lines = message.Split('|', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+                        foreach (var line in lines)
+                        {
+                            var detail = $"期貨商登入回報({market})：{line}";
+                            manager.Log.Add(detail, detail, ZenPlatform.LogText.LogTxtColor.黃色);
+                        }
+                    }
+                }
             }
 
             var connected = Broker.IsDomesticConnected;
@@ -273,6 +345,11 @@ namespace ZenPlatform.Core
 
         public void EnqueueQuote(string product, string field, int year, int month, string value, bool isRequest, DateTime time, QuoteSource source)
         {
+            if (IsProgramStopped)
+            {
+                return;
+            }
+
             if (!string.IsNullOrWhiteSpace(CurContract) &&
                 ContractYear > 0 &&
                 ContractMonth > 0 &&
@@ -353,7 +430,13 @@ namespace ZenPlatform.Core
 
         private void UpdatePriceSubscription()
         {
-            PriceManager.Update(IsBrokerConnected, IsDdeConnected, ClientCtrl.IsLoggedIn, CurContract, ContractYear, ContractMonth);
+            if (IsProgramStopped)
+            {
+                _ = PriceManager.StopAsync();
+                return;
+            }
+
+            PriceManager.Update(IsBrokerConnected, IsDdeConnected, ClientCtrl.IsLoggedIn, IsMarketOpen ?? TimeCtrl.IsMarketOpenNow, CurContract, ContractYear, ContractMonth);
         }
 
         private void OnNetworkPriceSnapshot(ZClient.PriceSnapshot snapshot)
@@ -363,6 +446,7 @@ namespace ZenPlatform.Core
                 return;
             }
 
+            PriceManager.NotifyNetworkTick();
             EnqueueQuote(product, "成交價", year, month, snapshot.Last ?? "", true, TimeCtrl.ExchangeTime, QuoteSource.Network);
             EnqueueQuote(product, "買價", year, month, snapshot.Bid ?? "", true, TimeCtrl.ExchangeTime, QuoteSource.Network);
             EnqueueQuote(product, "賣價", year, month, snapshot.Ask ?? "", true, TimeCtrl.ExchangeTime, QuoteSource.Network);
@@ -387,6 +471,7 @@ namespace ZenPlatform.Core
                 return;
             }
 
+            PriceManager.NotifyNetworkTick();
             var value = update.Value ?? "";
             if (fieldName == "時間")
             {
@@ -394,6 +479,119 @@ namespace ZenPlatform.Core
             }
 
             EnqueueQuote(product, fieldName, year, month, value, false, TimeCtrl.ExchangeTime, QuoteSource.Network);
+        }
+
+        private void OnSessionTradeFailed(Strategy.Session session, string detail)
+        {
+            _ = SendSessionTradeFailedMailAsync(session, detail);
+        }
+
+        private decimal? ResolveContractPrice(string product, int year, int month, bool isBuy, TimeSpan timeout)
+        {
+            try
+            {
+                if (string.Equals(product, CurContract, StringComparison.Ordinal) &&
+                    year == ContractYear &&
+                    month == ContractMonth)
+                {
+                    var live = isBuy
+                        ? (TradeCtrl.Ask ?? TradeCtrl.Last ?? TradeCtrl.Bid)
+                        : (TradeCtrl.Bid ?? TradeCtrl.Last ?? TradeCtrl.Ask);
+                    if (live.HasValue && live.Value > 0m)
+                    {
+                        return live.Value;
+                    }
+                }
+
+                var started = DateTime.UtcNow;
+                while ((DateTime.UtcNow - started) < timeout)
+                {
+                    var snapshot = Client.SubscribePrice(product, year, month).GetAwaiter().GetResult();
+                    if (snapshot != null)
+                    {
+                        var parsed = ParseSnapshotPrice(snapshot, isBuy);
+                        if (parsed.HasValue && parsed.Value > 0m)
+                        {
+                            _ = Client.UnsubscribePrice(product, year, month);
+                            return parsed.Value;
+                        }
+                    }
+
+                    Thread.Sleep(200);
+                }
+            }
+            catch
+            {
+                // ignored
+            }
+
+            return null;
+        }
+
+        private static decimal? ParseSnapshotPrice(ZClient.PriceSnapshot snapshot, bool isBuy)
+        {
+            if (snapshot == null)
+            {
+                return null;
+            }
+
+            var primary = isBuy ? snapshot.Ask : snapshot.Bid;
+            if (decimal.TryParse(primary, out var px) && px > 0m)
+            {
+                return px;
+            }
+
+            if (decimal.TryParse(snapshot.Last, out var last) && last > 0m)
+            {
+                return last;
+            }
+
+            var secondary = isBuy ? snapshot.Bid : snapshot.Ask;
+            if (decimal.TryParse(secondary, out var alt) && alt > 0m)
+            {
+                return alt;
+            }
+
+            return null;
+        }
+
+        private async Task SendSessionTradeFailedMailAsync(Strategy.Session session, string detail)
+        {
+            var email = ClientCtrl.LastUserData?.User?.Email;
+            if (string.IsNullOrWhiteSpace(email))
+            {
+                return;
+            }
+
+            var manager = session.Manager;
+            var strategyText = manager != null ? $"策略{manager.Index + 1}" : "策略";
+            var now = manager?.CurrentTime;
+            var notifyTime = now.HasValue && now.Value.Year >= 2000 ? now.Value : DateTime.Now;
+            var sideText = session.StartPosition > 0 ? "多單" : session.StartPosition < 0 ? "空單" : "未知方向";
+            var reason = string.IsNullOrWhiteSpace(detail) ? "任務執行中發生交易失敗，此任務停止運作" : detail;
+
+            var subject = "【緊急系統通知】系統發生交易失敗";
+            var body =
+                $"親愛的使用者您好：\n\n" +
+                $"{ProgramName} 系統偵測到任務執行期間發生交易失敗，\n" +
+                $"系統已將該任務停止，以避免後續風險擴大。\n\n" +
+                $"事件資訊如下：\n\n" +
+                $"策略：{strategyText}\n" +
+                $"任務編號：[{session.Id}]\n" +
+                $"任務方向：{sideText}\n" +
+                $"發生時間：{notifyTime:yyyy/MM/dd HH:mm:ss}\n" +
+                $"失敗原因：{reason}\n\n" +
+                $"請您確認期貨商連線、帳號權限與下單條件是否正常，\n" +
+                $"必要時可手動重新建立任務。\n\n" +
+                $"祝\n交易順利\n\n" +
+                $"Magistock 系統自動通知";
+
+            var ok = await ClientCtrl.SendMailAsync(email, subject, body).ConfigureAwait(false);
+            if (!ok && manager != null)
+            {
+                var error = string.IsNullOrWhiteSpace(ClientCtrl.LastMailError) ? "未知錯誤" : ClientCtrl.LastMailError;
+                manager.Log.Add($"交易失敗通知寄信失敗：{error}", $"交易失敗通知寄信失敗：{error}", ZenPlatform.LogText.LogTxtColor.黃色);
+            }
         }
 
         private static bool TryParseContractKey(string contract, out string product, out int year, out int month)
@@ -437,7 +635,7 @@ namespace ZenPlatform.Core
                     manager.SuppressIndicatorLog = true;
                 }
 
-                var result = await Client.FetchKBarHistory(CurContract, ContractYear, ContractMonth, 3000).ConfigureAwait(false);
+                var result = await Client.FetchKBarHistory(CurContract, ContractYear, ContractMonth, 6000).ConfigureAwait(false);
                 if (token != _historyFetchToken)
                 {
                     foreach (var manager in SessionManagers)
@@ -466,6 +664,7 @@ namespace ZenPlatform.Core
                     if (manager.IsStrategyRunning)
                     {
                         manager.RebuildIndicators();
+                        manager.InitializeTrendSideFromLatestBar();
                     }
                     manager.SuppressIndicatorLog = false;
                 }

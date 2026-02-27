@@ -558,11 +558,11 @@ namespace KChartCore
             }
         }
 
-        public void SealCurrentBar()
+        public bool SealCurrentBar()
         {
             if (!_tfxRule.IsSealKbar(_currentTime))
             {
-                return;
+                return false;
             }
 
             _floatingBar.CloseTime = _currentTime;
@@ -593,6 +593,7 @@ namespace KChartCore
                 _floatingBar.ContainsMarketClose = true;
             }
 
+            var emitted = false;
             if (_floatingBar.High > 0 || _floatingBar.Open > 0 || _floatingBar.Close > 0 || _floatingBar.Low > 0)
             {
                 // 封棒時將 IsFloating 設為 false
@@ -606,6 +607,7 @@ namespace KChartCore
                 }
 
                 OnKbarCompleted?.Invoke(1, _floatingBar);
+                emitted = true;
             }
 
             // 記住當前總量（用於即時模式的增量計算）
@@ -627,6 +629,8 @@ namespace KChartCore
                     IsFloating = true
                 };
             }
+
+            return emitted;
         }
 
         protected void AppendOneMinuteBar(FunctionKBar bar)

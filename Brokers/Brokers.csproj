@@ -15,6 +15,12 @@
     <ConcordApiClientDll>$(ConcordApiRoot)\20250407_期貨API\期貨API元件\Concord.API.Future.Client.dll</ConcordApiClientDll>
     <ConcordApiAtlDll>$(ConcordApiRoot)\20250407_期貨API\期貨API元件\ConcordsCAPIATL.dll</ConcordApiAtlDll>
   </PropertyGroup>
+  <PropertyGroup Condition="'$(PublishDir)'!=''">
+    <DebugType>none</DebugType>
+    <DebugSymbols>false</DebugSymbols>
+    <IncludeSymbols>false</IncludeSymbols>
+    <CopyOutputSymbolsToPublishDirectory>false</CopyOutputSymbolsToPublishDirectory>
+  </PropertyGroup>
 
   <ItemGroup>
     <Reference Include="Concord.API.Future.Client">
@@ -30,7 +36,7 @@
     <None Include="$(ConcordApiClientDll)" Condition="Exists('$(ConcordApiClientDll)')">
       <Link>Concord.API.Future.Client.dll</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-      <CopyToPublishDirectory>Always</CopyToPublishDirectory>
+      <CopyToPublishDirectory>Never</CopyToPublishDirectory>
     </None>
     <None Include="$(ConcordApiAtlDll)" Condition="Exists('$(ConcordApiAtlDll)')">
       <Link>ConcordsCAPIATL.dll</Link>

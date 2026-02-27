@@ -117,6 +117,20 @@ namespace ZenPlatform.Core
                     PriceUpdated?.Invoke(PriceType.成交價, quote.Value);
                     if (decimal.TryParse(quote.Value, out var tickPrice))
                     {
+                        if (quote.IsRequest)
+                        {
+                            // Request 快照只更新顯示，不餵入 K 棒計算。
+                            TickUpdated?.Invoke(tickPrice, _hasVolume ? _lastFloatingVolume : 0);
+                            break;
+                        }
+
+                        if (!_engine.IsMarketCurrentlyOpen())
+                        {
+                            // 休市時只更新報價顯示，不把價格餵進K棒引擎，避免生成假K棒
+                            TickUpdated?.Invoke(tickPrice, 0);
+                            break;
+                        }
+
                         if (_hasVolume)
                         {
                             _engine.SetVolume(_lastVolume);
@@ -130,6 +144,16 @@ namespace ZenPlatform.Core
                     PriceUpdated?.Invoke(PriceType.成交量, quote.Value);
                     if (int.TryParse(quote.Value, out var vol))
                     {
+                        if (quote.IsRequest)
+                        {
+                            // Request 快照只更新顯示，不更新 K 棒引擎的成交量狀態。
+                            _lastVolume = vol;
+                            _hasVolume = true;
+                            _lastTotalVolume = vol;
+                            _lastFloatingVolume = 0;
+                            break;
+                        }
+
                         if (_volumeBaselinePending)
                         {
                             _volumeBaselinePending = false;

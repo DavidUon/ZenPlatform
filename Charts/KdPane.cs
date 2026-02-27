@@ -11,6 +11,12 @@ namespace Charts
     // 簡易 KD 副圖面板（目前僅作為佈局與同步範本，未實作實際繪圖）
     public class KdPane : ChartPane
     {
+        private const string KeyK = "KD_K";
+        private const string KeyD = "KD_D";
+        private const string KeyMetaPeriod = "KD_META_PERIOD";
+        private const string KeyMetaSmoothK = "KD_META_SMOOTHK";
+        private const string KeyMetaSmoothD = "KD_META_SMOOTHD";
+
         protected override bool EnableBatchDrawing => false; // 逐點繪製線段
 
         private struct KdPoint
@@ -37,7 +43,7 @@ namespace Charts
         public KdPane() : base()
         {
             _priceInfoPanel.Visibility = Visibility.Visible;
-            _priceInfoPanel.SetTitle("KD指標");
+            _priceInfoPanel.SetTitle("KD");
             _priceInfoPanel.SetTitleClickable(true);
             _priceInfoPanel.TitleClicked += () =>
             {
@@ -82,7 +88,42 @@ namespace Charts
                 // 若 LoadHistory 後 _hisBars 物件已更換，_indexMap 會找不到當前 bar
                 if (!_indexMap.ContainsKey(_hisBars[0])) needRecalc = true;
             }
-            if (needRecalc) RecalculateKd();
+            if (needRecalc)
+            {
+                if (!TryLoadFromIndicators())
+                {
+                    RecalculateKd();
+                }
+            }
+        }
+
+        private bool TryLoadFromIndicators()
+        {
+            _kd.Clear();
+            _indexMap.Clear();
+            if (_hisBars.Count == 0) return false;
+
+            for (int i = 0; i < _hisBars.Count; i++)
+            {
+                var bar = _hisBars[i];
+                if (bar.Indicators == null ||
+                    !bar.Indicators.TryGetValue(KeyMetaPeriod, out var period) ||
+                    !bar.Indicators.TryGetValue(KeyMetaSmoothK, out var smoothK) ||
+                    !bar.Indicators.TryGetValue(KeyMetaSmoothD, out var smoothD) ||
+                    (int)period != _period ||
+                    (int)smoothK != _smoothK ||
+                    (int)smoothD != _smoothD ||
+                    !bar.Indicators.TryGetValue(KeyK, out var k) ||
+                    !bar.Indicators.TryGetValue(KeyD, out var d))
+                {
+                    _kd.Clear();
+                    _indexMap.Clear();
+                    return false;
+                }
+                _kd.Add(new KdPoint { Time = bar.Time, K = k, D = d });
+                _indexMap[bar] = i;
+            }
+            return true;
         }
 
         private void RecalculateKd()
@@ -121,8 +162,11 @@ namespace Charts
 
                 _kd.Add(new KdPoint { Time = bar.Time, K = k, D = d });
                 _indexMap[bar] = i;
-                bar.Indicators["KD_K"] = k;
-                bar.Indicators["KD_D"] = d;
+                bar.Indicators[KeyK] = k;
+                bar.Indicators[KeyD] = d;
+                bar.Indicators[KeyMetaPeriod] = _period;
+                bar.Indicators[KeyMetaSmoothK] = _smoothK;
+                bar.Indicators[KeyMetaSmoothD] = _smoothD;
             }
         }
 

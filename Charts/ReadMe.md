@@ -51,7 +51,8 @@ Charts Library 設計說明
 - 內容：
   - PriceDecimals：價格顯示小數位數（預設 0；成交量總為 0）。
   - RowHeights：主圖與各副圖的 Star 權重集合（總和 1）。
-  - Overlays：主圖疊加（MA/BOLL/BBI）型別與參數／色彩（BBI 支援 4 組期間）。
+- Overlays：主圖疊加（MA/BOLL/BBI/SAR）型別與參數／色彩（BBI 支援 4 組期間）。
+- Indicators：副圖指標（VOL/KD/MACD/ATR/HA），HA 為 Heikin-Ashi 蠟燭圖窗格（上漲紅、下跌綠）。
   - Indicators：副圖清單（VOL/KD/MACD）及其參數。
 - 載入策略：
   - 自動在 MultiPaneChartView Loaded 時載入；若 RowHeights 與現有窗格數不符則改用預設比例（主圖 0.7、其餘平均）。
@@ -170,11 +171,12 @@ API 一覽（主要）
   - `LoadHistory(List<ChartKBar>)`
   - `SetPriceDecimals(int places)`
   - `AddIndicatorPanel(IndicatorPanelType)` / `RemoveIndicatorPanel(IndicatorPanelType)` / `HasIndicatorPanel`
-- `AddBollingerOverlay(int, double, Color?, double)` / `RemoveBollingerOverlay()` / `SetOverlayPara_Bollinger(Window?)`
-- `AddBbiOverlay(Color?)` / `RemoveBbiOverlay()` / `SetOverlayPara_Bbi(Window?)`
-- `AddMaOverlay(int, string, Color)` / `RemoveMaOverlayByPeriod(int)` / `ClearMaOverlays()` / `SetOverlayPara_Ma(Window?)`
+  - `AddBollingerOverlay(int, double, Color?, double)` / `RemoveBollingerOverlay()` / `SetOverlayPara_Bollinger(Window?)`
+  - `AddBbiOverlay(Color?)` / `RemoveBbiOverlay()` / `SetOverlayPara_Bbi(Window?)`
+  - `AddMaOverlay(int, string, Color)` / `RemoveMaOverlayByPeriod(int)` / `ClearMaOverlays()` / `SetOverlayPara_Ma(Window?)`
+  - `AddSarOverlay(decimal, decimal, Color?)` / `RemoveSarOverlay()` / `SetOverlayPara_Sar(Window?)`
 - `PromptRemoveMaOverlayByPeriod(Window?)`：由 Charts 內建視窗詢問期間後移除對應均線
-- `ShowAppearLayerWindow(Window?)`：開啟圖層顯示視窗（勾選成交量/KD/MACD、MA、BBI、BOLL）
+- `ShowAppearLayerWindow(Window?)`：開啟圖層顯示視窗（勾選成交量/KD/MACD/ATR/HA、MA、BBI、BOLL、SAR）
 - `UseDefaultTimeframeBar()`：將內建 TimeframeBar 放到主圖右上角並回傳控制項（訂閱 `OnTimeframeChange` 即可）
 
 ### TimeframeBar（內建控制項）

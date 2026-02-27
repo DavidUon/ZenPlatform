@@ -42,7 +42,7 @@ namespace ZenPlatform.Strategy
             }
 
             int closeQty = Math.Min(Math.Abs(netQty), Math.Abs(signedQty));
-            decimal pnl = netSign > 0 ? (price - AvgEntryPrice) * closeQty : (AvgEntryPrice - price) * closeQty;
+            decimal pnl = netSign > 0 ? (price - AvgEntryPrice) : (AvgEntryPrice - price);
             PingProfit += pnl;
             realizedDelta = pnl;
 
@@ -96,11 +96,11 @@ namespace ZenPlatform.Strategy
 
             if (TotalKou > 0)
             {
-                FloatProfit = (buyPrice - AvgEntryPrice) * TotalKou;
+                FloatProfit = buyPrice - AvgEntryPrice;
                 return;
             }
 
-            FloatProfit = (AvgEntryPrice - sellPrice) * Math.Abs(TotalKou);
+            FloatProfit = AvgEntryPrice - sellPrice;
         }
     }
 

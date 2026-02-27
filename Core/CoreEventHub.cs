@@ -1,6 +1,5 @@
 using System;
 using ZenPlatform.SessionManager;
-using ZenPlatform.Debug;
 using ZenPlatform.Trade;
 
 namespace ZenPlatform.Core
@@ -46,39 +45,8 @@ namespace ZenPlatform.Core
                     continue;
                 }
 
-                if (manager.RuleSet.KbarPeriod == period)
-                {
-                    var closeStamp = new DateTime(bar.CloseTime.Year, bar.CloseTime.Month, bar.CloseTime.Day,
-                        bar.CloseTime.Hour, bar.CloseTime.Minute, 0, DateTimeKind.Unspecified);
-                    if (manager.LastIndicatorBarCloseTime.HasValue && closeStamp <= manager.LastIndicatorBarCloseTime.Value)
-                    {
-                        continue;
-                    }
-
-                    if (manager.Indicators != null)
-                    {
-                        lock (manager.IndicatorSync)
-                        {
-                            manager.Indicators.Update(new ZenPlatform.Indicators.KBar(bar.StartTime, bar.Open, bar.High, bar.Low, bar.Close, bar.Volume));
-                            if (manager.SuppressIndicatorLog)
-                            {
-                                // Suppressed during history import.
-                            }
-                            // KDJ log comes only from RebuildIndicators for a single source of truth.
-
-                            manager.LastIndicatorBarCloseTime = closeStamp;
-                            if (manager.IndicatorsReadyForLog && !manager.SuppressIndicatorLog)
-                            {
-                            }
-                        }
-                    }
-                    else
-                    {
-                        manager.LastIndicatorBarCloseTime = closeStamp;
-                    }
-                }
-
-                manager.OnKBarCompleted(period, bar);
+                var kbar = new ZenPlatform.Strategy.KBar(bar.Open, bar.High, bar.Low, bar.Close, bar.Volume);
+                manager.OnKBarCompleted(period, kbar);
             }
         }
 
@@ -101,16 +69,22 @@ namespace ZenPlatform.Core
 
             if (item.Type == CoreQueueType.PriceUpdate && item.Quote != null)
             {
-                _tradeCtrl.OnQuote(item.Quote);
-                foreach (var manager in _sessionManagers)
+                var quote = item.Quote;
+                if (!quote.IsRequest)
                 {
-                    if (manager.IsStrategyRunning && manager.AcceptPriceTicks)
+                    _tradeCtrl.OnQuote(quote);
+                    foreach (var manager in _sessionManagers)
                     {
-                        if (manager.IsBacktestActive)
+                        if (manager.IsStrategyRunning && manager.AcceptPriceTicks)
                         {
+                            if (manager.IsBacktestActive)
+                            {
+                                continue;
+                            }
+                            manager.OnTick(quote);
                             continue;
                         }
-                        manager.OnTick(item.Quote);
+
                     }
                 }
             }

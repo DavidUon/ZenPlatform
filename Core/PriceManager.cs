@@ -5,6 +5,13 @@ namespace ZenPlatform.Core
 {
     public sealed class PriceManager
     {
+        public sealed record QuoteHealth(
+            bool DdeAvailable,
+            bool NetworkAvailable,
+            DateTime? LastDdeTickUtc,
+            DateTime? LastNetworkTickUtc,
+            string Reason);
+
         public enum PriceSource
         {
             None,
@@ -26,8 +33,19 @@ namespace ZenPlatform.Core
         private string? _networkProduct;
         private int _networkYear;
         private int _networkMonth;
-        private bool _ddeSeenOnce;
         private bool _temporaryNetworkFallback;
+        private DateTime? _lastDdeTickUtc;
+        private DateTime? _lastNetworkTickUtc;
+        private QuoteHealth _lastHealth = new(false, false, null, null, "init");
+        private PriceSource? _pendingSource;
+        private DateTime? _pendingSinceUtc;
+        private DateTime? _lastSourceChangedUtc;
+
+        // Use a longer freshness window so low-liquidity sessions don't flap source state.
+        // Health checks should maintain connectivity signal even when there are no trades.
+        private static readonly TimeSpan TickStaleThreshold = TimeSpan.FromSeconds(65);
+        private static readonly TimeSpan SwitchDebounce = TimeSpan.FromSeconds(3);
+        private static readonly TimeSpan MinSourceHold = TimeSpan.FromSeconds(10);
 
         public PriceManager(ZClient.ZClient client, DdeService ddeService)
         {
@@ -42,12 +60,23 @@ namespace ZenPlatform.Core
 
         public PriceMode Mode => _mode;
         public PriceSource CurrentSource => _priceSource;
-        public bool DdeSeenOnce => _ddeSeenOnce;
+        public QuoteHealth LastHealth => _lastHealth;
         public event Action<PriceSource, PriceSource>? SourceChanged;
+        public event Action<QuoteHealth>? HealthChanged;
 
         public void SetTemporaryNetworkFallback(bool enabled)
         {
             _temporaryNetworkFallback = enabled;
+        }
+
+        public void NotifyDdeTick(DateTime? atUtc = null)
+        {
+            _lastDdeTickUtc = atUtc ?? DateTime.UtcNow;
+        }
+
+        public void NotifyNetworkTick(DateTime? atUtc = null)
+        {
+            _lastNetworkTickUtc = atUtc ?? DateTime.UtcNow;
         }
 
         public void ResetNetworkSubscription()
@@ -57,28 +86,35 @@ namespace ZenPlatform.Core
             _networkMonth = 0;
         }
 
-        public void Update(bool brokerConnected, bool ddeConnected, bool loggedIn, string contract, int year, int month)
+        public Task StopAsync()
         {
-            if (!brokerConnected)
+            _priceSource = PriceSource.None;
+            _temporaryNetworkFallback = false;
+            _pendingSource = null;
+            _pendingSinceUtc = null;
+            _lastSourceChangedUtc = null;
+            return UnsubscribeNetworkAsync();
+        }
+
+        public void Update(bool brokerConnected, bool ddeConnected, bool loggedIn, bool isMarketOpen, string contract, int year, int month)
+        {
+            var nowUtc = DateTime.UtcNow;
+            var health = EvaluateHealth(nowUtc, brokerConnected, ddeConnected, loggedIn, isMarketOpen);
+            if (!Equals(health, _lastHealth))
             {
-                _ddeSeenOnce = false;
-            }
-            else if (ddeConnected)
-            {
-                _ddeSeenOnce = true;
+                _lastHealth = health;
+                HealthChanged?.Invoke(health);
             }
 
-            var desiredSource = ResolvePriceSource(brokerConnected, ddeConnected, loggedIn);
-            if (desiredSource != _priceSource)
+            var desiredSource = ResolvePriceSource(health);
+            if (desiredSource == _priceSource)
             {
-                var prev = _priceSource;
-                if (_priceSource == PriceSource.Network)
-                {
-                    _ = UnsubscribeNetworkAsync();
-                }
-
-                _priceSource = desiredSource;
-                SourceChanged?.Invoke(prev, _priceSource);
+                _pendingSource = null;
+                _pendingSinceUtc = null;
+            }
+            else if (CanSwitchTo(desiredSource, nowUtc))
+            {
+                ApplySwitch(desiredSource, nowUtc);
             }
 
             if (_priceSource == PriceSource.Dde)
@@ -91,35 +127,88 @@ namespace ZenPlatform.Core
             }
         }
 
-        private PriceSource ResolvePriceSource(bool brokerConnected, bool ddeConnected, bool loggedIn)
+        private QuoteHealth EvaluateHealth(DateTime nowUtc, bool brokerConnected, bool ddeConnected, bool loggedIn, bool isMarketOpen)
         {
-            var ddeAvailable = brokerConnected && ddeConnected;
-            var networkAvailable = loggedIn;
+            var ddeLinked = ddeConnected;
+            var networkLinked = loggedIn;
+            // DDE availability should be driven by connection/heartbeat, not trade flow cadence.
+            // Low-liquidity periods can have long gaps without ticks while DDE is still healthy.
+            var ddeFresh = true;
+            var networkFresh = !isMarketOpen || !_lastNetworkTickUtc.HasValue || (nowUtc - _lastNetworkTickUtc.Value) <= TickStaleThreshold;
 
+            var ddeAvailable = ddeLinked && ddeFresh;
+            var networkAvailable = networkLinked && networkFresh;
+
+            var reason = "ok";
+            if (!ddeLinked && !networkLinked) reason = "no_dde_and_no_network_link";
+            else if (!ddeLinked) reason = "dde_link_down";
+            else if (!ddeFresh) reason = "dde_stale";
+            else if (!networkLinked) reason = "network_not_logged_in";
+            else if (!networkFresh) reason = "network_stale";
+
+            return new QuoteHealth(ddeAvailable, networkAvailable, _lastDdeTickUtc, _lastNetworkTickUtc, reason);
+        }
+
+        private PriceSource ResolvePriceSource(QuoteHealth health)
+        {
             return _mode switch
             {
-                PriceMode.ManualDde => ddeAvailable ? PriceSource.Dde : (networkAvailable ? PriceSource.Network : PriceSource.None),
-                PriceMode.ManualNetwork => networkAvailable ? PriceSource.Network : (ddeAvailable ? PriceSource.Dde : PriceSource.None),
-                _ => ResolveAutoSource(brokerConnected, ddeAvailable, networkAvailable)
+                PriceMode.ManualDde => health.DdeAvailable ? PriceSource.Dde : (health.NetworkAvailable ? PriceSource.Network : PriceSource.None),
+                PriceMode.ManualNetwork => health.NetworkAvailable ? PriceSource.Network : (health.DdeAvailable ? PriceSource.Dde : PriceSource.None),
+                _ => ResolveAutoSource(health)
             };
         }
 
-        private PriceSource ResolveAutoSource(bool brokerConnected, bool ddeAvailable, bool networkAvailable)
+        private PriceSource ResolveAutoSource(QuoteHealth health)
         {
-            if (brokerConnected)
+            if (_temporaryNetworkFallback && health.NetworkAvailable)
+                return PriceSource.Network;
+
+            if (health.DdeAvailable)
+                return PriceSource.Dde;
+
+            if (health.NetworkAvailable)
+                return PriceSource.Network;
+
+            return PriceSource.None;
+        }
+
+        private bool CanSwitchTo(PriceSource desiredSource, DateTime nowUtc)
+        {
+            if (_pendingSource != desiredSource)
             {
-                if (_temporaryNetworkFallback && networkAvailable)
-                    return PriceSource.Network;
-
-                if (ddeAvailable)
-                    return PriceSource.Dde;
-
-                return _ddeSeenOnce && networkAvailable
-                    ? PriceSource.Network
-                    : PriceSource.None;
+                _pendingSource = desiredSource;
+                _pendingSinceUtc = nowUtc;
+                return false;
             }
 
-            return ddeAvailable ? PriceSource.Dde : (networkAvailable ? PriceSource.Network : PriceSource.None);
+            if (!_pendingSinceUtc.HasValue || (nowUtc - _pendingSinceUtc.Value) < SwitchDebounce)
+                return false;
+
+            if (_lastSourceChangedUtc.HasValue &&
+                _priceSource != PriceSource.None &&
+                desiredSource != _priceSource &&
+                (nowUtc - _lastSourceChangedUtc.Value) < MinSourceHold)
+            {
+                return false;
+            }
+
+            return true;
+        }
+
+        private void ApplySwitch(PriceSource desiredSource, DateTime nowUtc)
+        {
+            var prev = _priceSource;
+            if (_priceSource == PriceSource.Network)
+            {
+                _ = UnsubscribeNetworkAsync();
+            }
+
+            _priceSource = desiredSource;
+            _lastSourceChangedUtc = nowUtc;
+            _pendingSource = null;
+            _pendingSinceUtc = null;
+            SourceChanged?.Invoke(prev, _priceSource);
         }
 
         private async Task SubscribeNetworkIfNeededAsync(string contract, int year, int month, bool loggedIn)

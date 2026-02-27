@@ -4,7 +4,8 @@
         Title="確認" Width="380" SizeToContent="Height"
         WindowStartupLocation="CenterOwner"
         Background="{StaticResource BrushWindowBackground}"
-        Foreground="{StaticResource BrushText}">
+        Foreground="{StaticResource BrushText}"
+        ShowInTaskbar="False">
     <Grid Margin="16">
         <Grid.RowDefinitions>
             <RowDefinition Height="*" />

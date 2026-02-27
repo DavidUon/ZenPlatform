@@ -1,0 +1,43 @@
+<Window x:Class="ZenPlatform.HelpInfoWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="說明"
+        Width="520"
+        SizeToContent="Height"
+        MaxHeight="520"
+        WindowStartupLocation="Manual"
+        WindowStyle="None"
+        ResizeMode="NoResize"
+        Background="{StaticResource BrushSurface}"
+        ShowInTaskbar="False"
+        PreviewMouseLeftButtonDown="OnWindowPreviewMouseLeftButtonDown"
+        PreviewKeyDown="OnWindowPreviewKeyDown"
+        Deactivated="OnWindowDeactivated"
+        Loaded="OnWindowLoaded">
+    <Border BorderBrush="White"
+            BorderThickness="1"
+            Background="{StaticResource BrushSurface}"
+            Padding="12">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <TextBlock x:Name="TitleText"
+                       Grid.Row="0"
+                       Margin="0,0,0,8"
+                       FontWeight="Bold"
+                       FontSize="18"
+                       Text="說明" />
+
+            <ScrollViewer Grid.Row="1"
+                          MaxHeight="430"
+                          VerticalScrollBarVisibility="Auto">
+                <TextBlock x:Name="BodyText"
+                           TextWrapping="Wrap"
+                           LineHeight="24" />
+            </ScrollViewer>
+        </Grid>
+    </Border>
+</Window>

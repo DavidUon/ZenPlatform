@@ -7,7 +7,7 @@
         xmlns:uc="clr-namespace:ZenPlatform.MVVM.UserControls"
         xmlns:charts="clr-namespace:Charts;assembly=Charts"
         mc:Ignorable="d"
-        Height="450" Width="800"
+        Height="1041" Width="1884"
         Background="{StaticResource BrushWindowBackground}"
         Foreground="{StaticResource BrushText}">
     <Window.Title>
@@ -28,17 +28,17 @@
             <Grid.ColumnDefinitions>
                 <ColumnDefinition x:Name="LeftPanelColumn" Width="*" MinWidth="240" />
                 <ColumnDefinition Width="5" />
-                <ColumnDefinition x:Name="RightPanelColumn" Width="280" MinWidth="160" />
+                <ColumnDefinition x:Name="RightPanelColumn" Width="323" MinWidth="160" />
             </Grid.ColumnDefinitions>
 
-            <Grid Grid.Column="0">
+            <Grid x:Name="LeftPaneGrid" Grid.Column="0">
                 <Grid.RowDefinitions>
                     <RowDefinition x:Name="ChartRow" Height="*" MinHeight="180" />
                     <RowDefinition Height="5" />
-                    <RowDefinition x:Name="TaskListRow" Height="220" MinHeight="120" />
+                    <RowDefinition x:Name="TaskListRow" Height="372" MinHeight="372" MaxHeight="1000" />
                 </Grid.RowDefinitions>
 
-                <Border Grid.Row="0" Margin="6" Padding="6" Background="Transparent">
+                <Border x:Name="k線圖區" Grid.Row="0" Margin="6" Padding="6" Background="Transparent">
                     <Border.ContextMenu>
                         <ContextMenu Opened="ChartContextMenu_Opened">
                             <MenuItem Header="技術指標" Click="OnChartIndicatorClick" />
@@ -55,8 +55,11 @@
                 <GridSplitter Grid.Row="1" Height="5" HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
                               ResizeDirection="Rows" />
 
-                <Border Grid.Row="2" Margin="6" Padding="6">
+                <Border x:Name="任務區" Grid.Row="2" Margin="2,6,2,2" Padding="2,6,2,2">
                     <TabControl x:Name="SessionTabs"
+                                HorizontalContentAlignment="Stretch"
+                                VerticalContentAlignment="Stretch"
+                                MinHeight="0"
                                 ItemsSource="{Binding SessionPages}"
                                 SelectionChanged="OnSessionTabChanged">
                         <TabControl.ItemTemplate>
@@ -94,7 +97,9 @@
                         </TabControl.ItemContainerStyle>
                         <TabControl.ContentTemplate>
                             <DataTemplate>
-                                <uc:SessionPageControl />
+                                <uc:SessionPageControl HorizontalAlignment="Stretch"
+                                                       VerticalAlignment="Stretch"
+                                                       MinHeight="0" />
                             </DataTemplate>
                         </TabControl.ContentTemplate>
                     </TabControl>
@@ -112,7 +117,7 @@
                     <RowDefinition Height="*" />
                 </Grid.RowDefinitions>
 
-                <Border x:Name="LogHeaderBorder" Grid.Row="0" Padding="1">
+                <Border x:Name="策略名稱區" Grid.Row="0" Padding="1">
                     <Grid>
                         <TextBlock x:Name="LogHeaderText"
                                    Text="台指二號"
@@ -173,7 +178,7 @@
                 <GridSplitter Grid.Row="2" Height="5" HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
                               ResizeDirection="Rows" />
 
-                <Border Grid.Row="3" Padding="1">
+                <Border x:Name="訊息區" Grid.Row="3" Padding="1">
                     <RichTextBox x:Name="LogOutputBox"
                                  Background="{StaticResource BrushInputBackground}"
                                  Foreground="{StaticResource BrushText}"
@@ -186,13 +191,13 @@
             </Grid>
         </Grid>
 
-        <StatusBar Grid.Row="1" Height="24">
+        <StatusBar x:Name="狀態區" Grid.Row="1" Height="24">
             <StatusBarItem HorizontalContentAlignment="Stretch">
                 <Grid>
                     <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="800" />
+                        <ColumnDefinition Width="Auto" MinWidth="300" />
                         <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="800" />
+                        <ColumnDefinition Width="Auto" MinWidth="300" />
                     </Grid.ColumnDefinitions>
 
                     <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
@@ -244,6 +249,27 @@
                     <Grid Grid.Column="1" />
 
                     <StackPanel Grid.Column="2" Orientation="Horizontal" HorizontalAlignment="Right">
+                    <TextBlock x:Name="UpdateStatusText"
+                               Text="有可用更新"
+                               Visibility="Collapsed"
+                               Foreground="Gold"
+                               Margin="0,0,2,0"
+                               Cursor="Hand"
+                               Padding="4,0"
+                               MouseLeftButtonUp="OnUpdateStatusClick">
+                        <TextBlock.Style>
+                            <Style TargetType="{x:Type TextBlock}" BasedOn="{StaticResource {x:Type TextBlock}}">
+                                <Setter Property="Background" Value="Transparent" />
+                                <Setter Property="VerticalAlignment" Value="Center" />
+                                <Style.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter Property="Background" Value="#FF787878" />
+                                    </Trigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+                    <Border x:Name="UpdateStatusDivider" Width="1" Margin="8,2" Background="{StaticResource BrushBorder}" Visibility="Collapsed" />
                     <TextBlock Text="聯絡客服" Cursor="Hand" Padding="4,0"
                                MouseLeftButtonUp="OnSupportClick">
                         <TextBlock.Style>
@@ -293,7 +319,7 @@
                         <TextBlock.Style>
                             <Style TargetType="{x:Type TextBlock}" BasedOn="{StaticResource {x:Type TextBlock}}">
                                 <Setter Property="Text" Value="收盤中" />
-                                <Setter Property="Foreground" Value="{StaticResource BrushMarketClosed}" />
+                                <Setter Property="Foreground" Value="{StaticResource BrushStatusClosed}" />
                                 <Style.Triggers>
                                     <DataTrigger Binding="{Binding IsMarketOpen}" Value="True">
                                         <Setter Property="Text" Value="開盤中" />
@@ -303,8 +329,8 @@
                             </Style>
                         </TextBlock.Style>
                     </TextBlock>
-                        <Border Width="1" Margin="8,2" Background="{StaticResource BrushBorder}" />
-                        <TextBlock x:Name="ClockText" Margin="0,0,6,0" />
+                    <Border Width="1" Margin="8,2" Background="{StaticResource BrushBorder}" />
+                    <TextBlock x:Name="ClockText" Margin="0,0,6,0" />
                     </StackPanel>
                 </Grid>
             </StatusBarItem>

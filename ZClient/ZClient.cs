@@ -102,6 +102,8 @@ public class ZClient
     private bool _isLoggedIn;
     private bool _loginRejected;
     private bool _logoutSent;
+    private Task? _heartbeatTask;
+    private long _lastPongUtcTicks;
 
     public event Action<string>? Log;
     public event Action<string>? Message;
@@ -115,6 +117,8 @@ public class ZClient
     public bool AutoReconnectEnabled { get; set; } = true;
     public int RetryDelayMs { get; set; } = 5000;
     public int LoginTimeoutMs { get; set; } = 5000;
+    public int HeartbeatIntervalMs { get; set; } = 10000;
+    public int HeartbeatMissThreshold { get; set; } = 6;
 
     public string SmtpHost { get; set; } = "smtp.gmail.com";
     public int SmtpPort { get; set; } = 587;
@@ -180,9 +184,14 @@ public class ZClient
         };
     }
 
+    private static string NormalizeLoginId(string? id)
+    {
+        return (id ?? string.Empty).Trim().ToUpperInvariant();
+    }
+
     public async Task<bool> Login(string id, string password)
     {
-        _loginId = id;
+        _loginId = NormalizeLoginId(id);
         _password = password;
         _loginRejected = false;
         _logoutSent = false;
@@ -220,10 +229,11 @@ public class ZClient
 
         LastRegisterError = "";
 
+        var normalizedId = NormalizeLoginId(id);
         var payload = new
         {
             type = "register",
-            id,
+            id = normalizedId,
             password,
             name,
             phone,
@@ -234,7 +244,7 @@ public class ZClient
         _registerTcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         var json = JsonSerializer.Serialize(payload);
         await SendTextAsync(json);
-        Log?.Invoke($"Sent register for {id}.");
+        Log?.Invoke($"Sent register for {normalizedId}.");
 
         var completed = await Task.WhenAny(_registerTcs.Task, Task.Delay(LoginTimeoutMs));
         if (completed != _registerTcs.Task)
@@ -252,16 +262,17 @@ public class ZClient
             return false;
 
         LastCheckIdError = "";
+        var normalizedId = NormalizeLoginId(id);
         var payload = new
         {
             type = "check_id",
-            id
+            id = normalizedId
         };
 
         _checkIdTcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         var json = JsonSerializer.Serialize(payload);
         await SendTextAsync(json);
-        Log?.Invoke($"Sent check_id for {id}.");
+        Log?.Invoke($"Sent check_id for {normalizedId}.");
 
         var completed = await Task.WhenAny(_checkIdTcs.Task, Task.Delay(LoginTimeoutMs));
         if (completed != _checkIdTcs.Task)
@@ -558,7 +569,10 @@ public class ZClient
             await _ws.ConnectAsync(uri, _cts.Token);
             Log?.Invoke($"Connected to {uri}.");
 
-            _ = Task.Run(() => ReceiveLoopAsync(_ws, _cts.Token));
+            var connectedWs = _ws;
+            Interlocked.Exchange(ref _lastPongUtcTicks, DateTime.UtcNow.Ticks);
+            _heartbeatTask = Task.Run(() => HeartbeatLoopAsync(connectedWs, _cts.Token));
+            _ = Task.Run(() => ReceiveLoopAsync(connectedWs, _cts.Token));
             return true;
         }
         catch (Exception ex)
@@ -638,7 +652,7 @@ public class ZClient
                     continue;
 
                 var msg = Encoding.UTF8.GetString(ms.ToArray());
-                if (TryHandleLoginResponse(msg) || TryHandleUserDataResponse(msg) || TryHandleActiveCheckResponse(msg) || TryHandleHistoryResponse(msg) || TryHandleImportKBarResponse(msg) || TryHandlePriceResponse(msg))
+                if (TryHandlePongResponse(msg) || TryHandleLoginResponse(msg) || TryHandleUserDataResponse(msg) || TryHandleActiveCheckResponse(msg) || TryHandleHistoryResponse(msg) || TryHandleImportKBarResponse(msg) || TryHandlePriceResponse(msg))
                     continue;
 
                 Message?.Invoke(msg);
@@ -699,6 +713,72 @@ public class ZClient
             }
 
             await Task.Delay(RetryDelayMs, token);
+        }
+    }
+
+    private async Task HeartbeatLoopAsync(ClientWebSocket ws, CancellationToken token)
+    {
+        try
+        {
+            while (ws.State == WebSocketState.Open && !token.IsCancellationRequested)
+            {
+                await Task.Delay(HeartbeatIntervalMs, token);
+
+                if (token.IsCancellationRequested || ws.State != WebSocketState.Open)
+                    break;
+
+                var nowTicks = DateTime.UtcNow.Ticks;
+                var lastPongTicks = Interlocked.Read(ref _lastPongUtcTicks);
+                var maxSilenceMs = (long)Math.Max(1, HeartbeatIntervalMs) * Math.Max(1, HeartbeatMissThreshold);
+                if (lastPongTicks > 0)
+                {
+                    var silenceMs = (nowTicks - lastPongTicks) / TimeSpan.TicksPerMillisecond;
+                    if (silenceMs > maxSilenceMs)
+                    {
+                        Log?.Invoke($"Heartbeat timeout ({silenceMs} ms without pong). Reconnecting.");
+                        ws.Abort();
+                        return;
+                    }
+                }
+
+                var payload = new
+                {
+                    type = "ping",
+                    ts = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds().ToString()
+                };
+
+                var json = JsonSerializer.Serialize(payload);
+                var bytes = Encoding.UTF8.GetBytes(json);
+                await ws.SendAsync(bytes, WebSocketMessageType.Text, true, token);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception ex)
+        {
+            if (!token.IsCancellationRequested)
+                Log?.Invoke($"Heartbeat error: {ex.Message}");
+        }
+    }
+
+    private bool TryHandlePongResponse(string message)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(message);
+            if (!doc.RootElement.TryGetProperty("type", out var typeProp))
+                return false;
+
+            if (!string.Equals(typeProp.GetString(), "pong", StringComparison.OrdinalIgnoreCase))
+                return false;
+
+            Interlocked.Exchange(ref _lastPongUtcTicks, DateTime.UtcNow.Ticks);
+            return true;
+        }
+        catch (JsonException)
+        {
+            return false;
         }
     }
 
@@ -1028,8 +1108,24 @@ public class ZClient
         LastUserData = null;
         _ws?.Dispose();
         _ws = null;
-        _cts?.Dispose();
+
+        var cts = _cts;
         _cts = null;
+        if (cts != null)
+        {
+            try
+            {
+                cts.Cancel();
+            }
+            catch (ObjectDisposedException)
+            {
+            }
+
+            cts.Dispose();
+        }
+
+        _heartbeatTask = null;
+        Interlocked.Exchange(ref _lastPongUtcTicks, 0);
     }
 
     public UserDataResult? QueryUserData()

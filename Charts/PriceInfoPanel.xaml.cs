@@ -162,7 +162,7 @@ namespace Charts
                     Text = ln.Label,
                     Foreground = Brushes.Gainsboro,
                     FontSize = ChartFontManager.GetFontSize("ChartFontSizeSm", 14),
-                    Margin = new System.Windows.Thickness(8, 0, 8, 0),
+                    Margin = new System.Windows.Thickness(0, 0, 0, 0),
                     VerticalAlignment = System.Windows.VerticalAlignment.Center
                 };
                 label.SetResourceReference(Control.FontSizeProperty, "ChartFontSizeSm");
@@ -189,7 +189,7 @@ namespace Charts
                         Text = up ? "▲" : "▼",
                         Foreground = up ? Brushes.Red : Brushes.LimeGreen,
                         FontSize = ChartFontManager.GetFontSize("ChartFontSizeSm", 14),
-                        Margin = new System.Windows.Thickness(6, 0, 0, 0),
+                        Margin = new System.Windows.Thickness(2, 0, 0, 0),
                         VerticalAlignment = System.Windows.VerticalAlignment.Center
                     };
                     arrow.SetResourceReference(Control.FontSizeProperty, "ChartFontSizeSm");
@@ -251,7 +251,7 @@ namespace Charts
                 header.Child = titleTb;
                 header.MouseLeftButtonUp += (_, __) => { SectionHeaderClicked?.Invoke(id); };
 
-                var linesPanel = new StackPanel { Orientation = Orientation.Vertical, Margin = new Thickness(8, 6, 8, 4) };
+                var linesPanel = new StackPanel { Orientation = Orientation.Vertical, Margin = new Thickness(2, 6, 2, 4) };
 
                 SectionsPanel.Children.Add(header);
                 SectionsPanel.Children.Add(linesPanel);
@@ -276,7 +276,7 @@ namespace Charts
                     Text = ln.Label,
                     Foreground = Brushes.Gainsboro,
                     FontSize = ChartFontManager.GetFontSize("ChartFontSizeSm", 14),
-                    Margin = new Thickness(8, 0, 8, 0),
+                    Margin = new Thickness(0, 0, 0, 0),
                     VerticalAlignment = VerticalAlignment.Center
                 };
                 label.SetResourceReference(Control.FontSizeProperty, "ChartFontSizeSm");
@@ -302,7 +302,7 @@ namespace Charts
                         Text = ln.ArrowDir.Value > 0 ? "▲" : "▼",
                         Foreground = ln.ArrowDir.Value > 0 ? Brushes.Red : Brushes.LimeGreen,
                         FontSize = ChartFontManager.GetFontSize("ChartFontSizeSm", 14),
-                        Margin = new Thickness(6, 0, 0, 0),
+                        Margin = new Thickness(2, 0, 0, 0),
                         VerticalAlignment = VerticalAlignment.Center
                     };
                     arrow.SetResourceReference(Control.FontSizeProperty, "ChartFontSizeSm");

@@ -6,7 +6,9 @@ namespace Charts
     {
         Vol,
         Macd,
-        Kd
+        Kd,
+        Atr,
+        Ha
     }
 
     public static class IndicatorPaneFactory
@@ -18,9 +20,10 @@ namespace Charts
                 IndicatorPanelType.Vol => new VolumePane(),
                 IndicatorPanelType.Macd => new MacdPane(),
                 IndicatorPanelType.Kd => new KdPane(),
+                IndicatorPanelType.Atr => new AtrPane(),
+                IndicatorPanelType.Ha => new HaPane(),
                 _ => new VolumePane()
             };
         }
     }
 }
-

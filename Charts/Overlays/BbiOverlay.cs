@@ -11,6 +11,11 @@ namespace Charts
     public class BbiOverlay : IOverlayIndicator
     {
         public string TagName => "BBI";
+        private const string KeyBbi = "BBI";
+        private const string KeyMetaP1 = "BBI_META_P1";
+        private const string KeyMetaP2 = "BBI_META_P2";
+        private const string KeyMetaP3 = "BBI_META_P3";
+        private const string KeyMetaP4 = "BBI_META_P4";
 
         private readonly int[] _periods;
         private readonly SolidColorBrush _lineBrush;
@@ -38,7 +43,10 @@ namespace Charts
         public void OnDataChanged(List<GraphKBar> bars)
         {
             _bars = bars;
-            Recalc();
+            if (!TryLoadFromIndicators())
+            {
+                Recalc();
+            }
         }
 
         public void OnViewportChanged(int visibleStart, int visibleCount, double spacing)
@@ -115,8 +123,50 @@ namespace Charts
                     avg += ma;
                 }
                 _bbi[i] = avg / pcount;
-                _bars[i].Indicators["BBI"] = (decimal)_bbi[i];
+                _bars[i].Indicators[KeyBbi] = (decimal)_bbi[i];
+                _bars[i].Indicators[KeyMetaP1] = _periods.Length > 0 ? _periods[0] : 0;
+                _bars[i].Indicators[KeyMetaP2] = _periods.Length > 1 ? _periods[1] : 0;
+                _bars[i].Indicators[KeyMetaP3] = _periods.Length > 2 ? _periods[2] : 0;
+                _bars[i].Indicators[KeyMetaP4] = _periods.Length > 3 ? _periods[3] : 0;
             }
+        }
+
+        private bool TryLoadFromIndicators()
+        {
+            if (_bars.Count == 0) return false;
+            _bbi = new double[_bars.Count];
+            for (int i = 0; i < _bars.Count; i++)
+            {
+                var indicators = _bars[i].Indicators;
+                if (indicators == null)
+                {
+                    return false;
+                }
+
+                if (!indicators.TryGetValue(KeyMetaP1, out var p1) ||
+                    !indicators.TryGetValue(KeyMetaP2, out var p2) ||
+                    !indicators.TryGetValue(KeyMetaP3, out var p3) ||
+                    !indicators.TryGetValue(KeyMetaP4, out var p4))
+                {
+                    return false;
+                }
+
+                var expectedP1 = _periods.Length > 0 ? _periods[0] : 0;
+                var expectedP2 = _periods.Length > 1 ? _periods[1] : 0;
+                var expectedP3 = _periods.Length > 2 ? _periods[2] : 0;
+                var expectedP4 = _periods.Length > 3 ? _periods[3] : 0;
+                if ((int)p1 != expectedP1 || (int)p2 != expectedP2 || (int)p3 != expectedP3 || (int)p4 != expectedP4)
+                {
+                    return false;
+                }
+
+                if (!indicators.TryGetValue(KeyBbi, out var v))
+                {
+                    return false;
+                }
+                _bbi[i] = (double)v;
+            }
+            return true;
         }
     }
 }

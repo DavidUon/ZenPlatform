@@ -14,29 +14,32 @@ using System.IO;
 using System.Windows.Media.Imaging;
 using System.Windows.Navigation;
 using System.Windows.Shapes;
+using System.Windows.Threading;
+using System.Text.Json;
 using Charts;
 using KChartCore;
 using Utility;
 using ZenPlatform.Core;
+using ZenPlatform.Core.AutoUpdate;
 using ZenPlatform.DdePrice;
 using ZenPlatform.MVVM.Cs;
-using ZenPlatform.Properties;
 
 namespace ZenPlatform
 {
 	/// <summary>
 	/// MainWindow.xaml 的互動邏輯
 	/// </summary>
-	public partial class MainWindow : Window
-	{
-		private readonly ZenPlatform.Core.Core _core = new ZenPlatform.Core.Core();
+		public partial class MainWindow : Window
+		{
+			private readonly ZenPlatform.Core.Core _core = new ZenPlatform.Core.Core();
 		private bool _didRender;
 		private bool _startupCompleted;
 		private bool _duplicateCheckInFlight;
 		private bool _duplicateCheckCompleted;
 		private bool _forceClose;
-		private int _viewPeriod = 1;
+		private int _viewPeriod = 5;
 		private DateTime? _lastClockStamp;
+		private string _lastChartContractKey = string.Empty;
 		private ZenPlatform.SessionManager.SessionManager? _selectedManager;
 		private TextBlock? _topBidText;
 		private TextBlock? _topAskText;
@@ -48,11 +51,34 @@ namespace ZenPlatform
 		private ToolTip? _brokerStatusToolTip;
 		private ToolTip? _userStatusToolTip;
 		private int? _pendingSessionIndex;
+			private const string LayoutConfigFileName = "user.config";
+			private const int AutoSaveIntervalMinutes = 10;
+			private const double TaskSplitterRowHeight = 5d;
+			private readonly DispatcherTimer _autoSaveTimer;
+			private readonly DispatcherTimer _autoUpdateTimer;
+		private readonly AutoUpdateService _autoUpdateService;
+		private bool _installerStartedOnClose;
+		private ZenPlatform.SessionManager.SessionManager? _editingLogHeaderManager;
 
-		public MainWindow()
-		{
-			InitializeComponent();
-			DataContext = _core;
+			public MainWindow()
+			{
+				InitializeComponent();
+				SizeChanged += (_, __) => ClampTaskListRowMaxHeight();
+				LeftPaneGrid.SizeChanged += (_, __) => ClampTaskListRowMaxHeight();
+				DataContext = _core;
+			_core.ClientCtrl.TargetUrl = UserInfoCtrl.DefaultTargetUrl;
+			_autoSaveTimer = new DispatcherTimer(DispatcherPriority.Background)
+			{
+				Interval = TimeSpan.FromMinutes(AutoSaveIntervalMinutes)
+			};
+			_autoSaveTimer.Tick += OnAutoSaveTimerTick;
+			_autoUpdateService = new AutoUpdateService(_core.BuildSerial);
+			_autoUpdateService.StateChanged += OnAutoUpdateStateChanged;
+			_autoUpdateTimer = new DispatcherTimer(DispatcherPriority.Background)
+			{
+				Interval = TimeSpan.FromMinutes(10)
+			};
+			_autoUpdateTimer.Tick += async (_, _) => await CheckUpdateInBackgroundAsync();
 			ApplyAppState(AppStateStore.Load());
 			_core.TimeCtrl.TimeTick += OnTimeTick;
 			_core.ChartBridge.PriceUpdated += OnChartPriceUpdated;
@@ -74,38 +100,26 @@ namespace ZenPlatform
 
 		private void MainWindow_SourceInitialized(object? sender, EventArgs e)
 		{
-			var settings = Settings.Default;
-
-			if (settings.WindowWidth > 0 && settings.WindowHeight > 0)
+			if (TryLoadLayoutConfig(out var cfg))
 			{
-				Width = settings.WindowWidth;
-				Height = settings.WindowHeight;
+				ApplyLayoutConfig(cfg);
 			}
-
-			if (!double.IsNaN(settings.WindowLeft) && !double.IsNaN(settings.WindowTop))
-			{
-				Left = settings.WindowLeft;
-				Top = settings.WindowTop;
-			}
-
-			if (settings.RightPanelWidth > 0)
-			{
-				RightPanelColumn.Width = new GridLength(settings.RightPanelWidth);
-			}
-
-			if (settings.TaskListHeight > 0)
-			{
-				TaskListRow.Height = new GridLength(settings.TaskListHeight);
-			}
-
-			var savedState = (WindowState)settings.WindowState;
-			WindowState = savedState == WindowState.Minimized ? WindowState.Normal : savedState;
 		}
 
-		private void MainWindow_Loaded(object sender, RoutedEventArgs e)
-		{
-			_core.LogCtrl.SetTarget(LogOutputBox);
-			_core.LogCtrl.SetModel(_core.MainLog);
+			private void MainWindow_Loaded(object sender, RoutedEventArgs e)
+			{
+				_core.LogCtrl.SetTarget(LogOutputBox);
+				_core.LogCtrl.SetModel(_core.MainLog);
+				RefreshUpdateBadge();
+				ClampTaskListRowMaxHeight();
+				if (!_autoSaveTimer.IsEnabled)
+				{
+					_autoSaveTimer.Start();
+			}
+			if (!_autoUpdateTimer.IsEnabled)
+			{
+				_autoUpdateTimer.Start();
+			}
 		}
 
 		private void MainWindow_ContentRendered(object? sender, EventArgs e)
@@ -133,6 +147,7 @@ namespace ZenPlatform
 				await _core.StartupAsync();
 				_startupCompleted = true;
 				await TryCheckDuplicateLoginAsync();
+				await CheckUpdateInBackgroundAsync();
 			}, System.Windows.Threading.DispatcherPriority.ApplicationIdle);
 		}
 
@@ -153,12 +168,14 @@ namespace ZenPlatform
 				return;
 			}
 
+			_editingLogHeaderManager = _selectedManager;
 			LogHeaderEditBox.Text = _selectedManager.DisplayName;
 			LogHeaderText.Visibility = Visibility.Collapsed;
 			LogHeaderEditBox.Visibility = Visibility.Visible;
 			LogHeaderEditBox.Focus();
 			LogHeaderEditBox.SelectAll();
 		}
+
 
 		private void OnLogHeaderEditLostFocus(object sender, RoutedEventArgs e)
 		{
@@ -176,15 +193,27 @@ namespace ZenPlatform
 
 		private void CommitLogHeaderEdit()
 		{
-			if (_selectedManager == null)
+			if (LogHeaderEditBox.Visibility != Visibility.Visible)
+			{
+				return;
+			}
+
+			var manager = _editingLogHeaderManager ?? _selectedManager;
+			if (manager == null)
 			{
 				return;
 			}
 
 			var input = LogHeaderEditBox.Text?.Trim() ?? string.Empty;
-			var defaultName = $"策略{_selectedManager.Index + 1}";
-			_selectedManager.Name = string.Equals(input, defaultName, StringComparison.Ordinal) ? string.Empty : input;
-			UpdateLogHeaderText(_selectedManager);
+			var defaultName = $"策略{manager.Index + 1}";
+			manager.Name = string.Equals(input, defaultName, StringComparison.Ordinal) ? string.Empty : input;
+
+			if (_selectedManager != null)
+			{
+				UpdateLogHeaderText(_selectedManager);
+			}
+
+			_editingLogHeaderManager = null;
 			LogHeaderEditBox.Visibility = Visibility.Collapsed;
 			LogHeaderText.Visibility = Visibility.Visible;
 		}
@@ -222,19 +251,19 @@ namespace ZenPlatform
 		{
 			if (manager.IsBacktestActive)
 			{
-				LogHeaderBorder.Background = (System.Windows.Media.Brush)FindResource("BrushTabBacktest");
+				策略名稱區.Background = (System.Windows.Media.Brush)FindResource("BrushTabBacktest");
 				return;
 			}
 
 			if (manager.IsStrategyRunning)
 			{
-				LogHeaderBorder.Background = manager.IsRealTrade
+				策略名稱區.Background = manager.IsRealTrade
 					? (System.Windows.Media.Brush)FindResource("BrushMarketClosed")
-					: (System.Windows.Media.Brush)FindResource("BrushLogSim");
+					: new SolidColorBrush(Color.FromRgb(0, 100, 0));
 				return;
 			}
 
-			LogHeaderBorder.Background = Brushes.Transparent;
+			策略名稱區.Background = Brushes.Transparent;
 		}
 
 		private void UpdateLogBorder(ZenPlatform.SessionManager.SessionManager manager)
@@ -251,7 +280,16 @@ namespace ZenPlatform
 			}
 			else if (manager.IsStrategyRunning)
 			{
-				brushKey = manager.IsRealTrade ? "BrushTabRealTrade" : "BrushMarketOpen";
+				if (manager.IsRealTrade)
+				{
+					brushKey = "BrushTabRealTrade";
+				}
+				else
+				{
+					LogOutputBox.BorderBrush = new SolidColorBrush(Color.FromRgb(0, 200, 0));
+					LogOutputBox.BorderThickness = new Thickness(1);
+					return;
+				}
 			}
 
 			LogOutputBox.BorderBrush = (System.Windows.Media.Brush)FindResource(brushKey);
@@ -266,6 +304,13 @@ namespace ZenPlatform
 				return;
 			}
 
+			if (!_forceClose && _autoUpdateService.HasPendingUpdate)
+			{
+				MessageBoxWindow.Show(this, "關閉後即將啟動新版安裝程序", "有可用更新");
+			}
+
+			_autoSaveTimer.Stop();
+			_autoUpdateTimer.Stop();
 			foreach (var manager in _core.SessionManagers)
 			{
 				if (manager.IsStrategyRunning)
@@ -273,8 +318,7 @@ namespace ZenPlatform
 					manager.Log.Add("程式關閉");
 				}
 			}
-			ZenPlatform.SessionManager.SessionStateStore.SaveAll(_core.SessionManagers);
-			SaveAppState();
+			PersistRuntimeSnapshot();
 			_core.TimeCtrl.TimeTick -= OnTimeTick;
 			_core.ChartBridge.PriceUpdated -= OnChartPriceUpdated;
 			_core.ChartBridge.TickUpdated -= OnChartTickUpdated;
@@ -298,26 +342,182 @@ namespace ZenPlatform
 			{
 				// Ignore disconnect failures on shutdown.
 			}
-			var settings = Settings.Default;
-			var bounds = WindowState == WindowState.Normal ? new Rect(Left, Top, Width, Height) : RestoreBounds;
-
-			settings.WindowLeft = bounds.Left;
-			settings.WindowTop = bounds.Top;
-			settings.WindowWidth = bounds.Width;
-			settings.WindowHeight = bounds.Height;
-			settings.WindowState = (int)WindowState;
-
-			if (RightPanelColumn.ActualWidth > 0)
+			try
 			{
-				settings.RightPanelWidth = RightPanelColumn.ActualWidth;
+				if (!_installerStartedOnClose)
+				{
+					_installerStartedOnClose = _autoUpdateService.TryLaunchPendingInstaller();
+				}
+			}
+			catch
+			{
+				// Ignore update launch failures on shutdown.
+			}
+			_autoUpdateService.StateChanged -= OnAutoUpdateStateChanged;
+			_autoUpdateService.Dispose();
+		}
+
+		private void OnAutoSaveTimerTick(object? sender, EventArgs e)
+		{
+			PersistRuntimeSnapshot();
+		}
+
+		private async Task CheckUpdateInBackgroundAsync()
+		{
+			try
+			{
+				await _autoUpdateService.CheckAndDownloadAsync();
+				RefreshUpdateBadge();
+			}
+			catch
+			{
+				// ignore background update failures
+			}
+		}
+
+		private void OnAutoUpdateStateChanged()
+		{
+			Dispatcher.Invoke(RefreshUpdateBadge);
+		}
+
+		private void RefreshUpdateBadge()
+		{
+			var hasUpdate = _autoUpdateService.HasPendingUpdate;
+			UpdateStatusText.Visibility = hasUpdate ? Visibility.Visible : Visibility.Collapsed;
+			UpdateStatusDivider.Visibility = hasUpdate ? Visibility.Visible : Visibility.Collapsed;
+		}
+
+		private void PersistRuntimeSnapshot()
+		{
+			try
+			{
+				ZenPlatform.SessionManager.SessionStateStore.SaveAll(_core.SessionManagers);
+				SaveAppState();
+
+				var bounds = WindowState == WindowState.Normal ? new Rect(Left, Top, Width, Height) : RestoreBounds;
+
+				try
+				{
+					SaveLayoutConfig(bounds);
+				}
+				catch
+				{
+					// Ignore layout persistence failures.
+				}
+
+			}
+			catch
+			{
+				// Ignore periodic persistence failures.
+			}
+		}
+
+		private sealed class LayoutConfig
+		{
+			public double WindowLeft { get; set; }
+			public double WindowTop { get; set; }
+			public double WindowWidth { get; set; }
+			public double WindowHeight { get; set; }
+			public int WindowState { get; set; }
+			public double RightPanelWidth { get; set; }
+			public double TaskListHeight { get; set; }
+		}
+
+		private static string GetLayoutConfigPath()
+			=> System.IO.Path.Combine(AppContext.BaseDirectory, LayoutConfigFileName);
+
+		private bool TryLoadLayoutConfig(out LayoutConfig cfg)
+		{
+			cfg = new LayoutConfig();
+			try
+			{
+				var path = GetLayoutConfigPath();
+				if (!File.Exists(path)) return false;
+				var json = File.ReadAllText(path);
+				var loaded = JsonSerializer.Deserialize<LayoutConfig>(json);
+				if (loaded == null) return false;
+				cfg = loaded;
+				return true;
+			}
+			catch
+			{
+				return false;
+			}
+		}
+
+			private void ApplyLayoutConfig(LayoutConfig cfg)
+			{
+			if (cfg.WindowWidth > 0 && cfg.WindowHeight > 0)
+			{
+				Width = cfg.WindowWidth;
+				Height = cfg.WindowHeight;
 			}
 
-			if (TaskListRow.ActualHeight > 0)
+			if (!double.IsNaN(cfg.WindowLeft) && !double.IsNaN(cfg.WindowTop))
 			{
-				settings.TaskListHeight = TaskListRow.ActualHeight;
+				Left = cfg.WindowLeft;
+				Top = cfg.WindowTop;
 			}
 
-			settings.Save();
+			if (cfg.RightPanelWidth > 0)
+			{
+				RightPanelColumn.Width = new GridLength(cfg.RightPanelWidth);
+			}
+
+				if (cfg.TaskListHeight > 0)
+				{
+					TaskListRow.Height = new GridLength(cfg.TaskListHeight);
+				}
+
+				ClampTaskListRowMaxHeight();
+
+				var savedState = (WindowState)cfg.WindowState;
+				WindowState = savedState == WindowState.Minimized ? WindowState.Normal : savedState;
+			}
+
+			private void ClampTaskListRowMaxHeight()
+			{
+				var available = LeftPaneGrid.ActualHeight;
+				if (available <= 0)
+				{
+					return;
+				}
+
+				var maxAllowed = available - ChartRow.MinHeight - TaskSplitterRowHeight;
+				if (double.IsNaN(maxAllowed) || double.IsInfinity(maxAllowed))
+				{
+					return;
+				}
+
+				var clampedMax = Math.Max(TaskListRow.MinHeight, maxAllowed);
+				TaskListRow.MaxHeight = clampedMax;
+
+				if (!TaskListRow.Height.IsAbsolute)
+				{
+					return;
+				}
+
+				var current = TaskListRow.Height.Value;
+				if (current > clampedMax)
+				{
+					TaskListRow.Height = new GridLength(clampedMax);
+				}
+			}
+
+		private void SaveLayoutConfig(Rect bounds)
+		{
+			var cfg = new LayoutConfig
+			{
+				WindowLeft = bounds.Left,
+				WindowTop = bounds.Top,
+				WindowWidth = bounds.Width,
+				WindowHeight = bounds.Height,
+				WindowState = (int)WindowState,
+				RightPanelWidth = RightPanelColumn.ActualWidth,
+				TaskListHeight = TaskListRow.ActualHeight
+			};
+			var json = JsonSerializer.Serialize(cfg, new JsonSerializerOptions { WriteIndented = true });
+			File.WriteAllText(GetLayoutConfigPath(), json);
 		}
 
 
@@ -342,7 +542,7 @@ namespace ZenPlatform
 
 			if (!string.IsNullOrWhiteSpace(state.TargetUrl))
 			{
-				_core.ClientCtrl.TargetUrl = state.TargetUrl;
+				// 連線目標由 UserInfoCtrl.DefaultTargetUrl 統一管理，不使用 app_state 覆寫。
 			}
 
 			if (!string.IsNullOrWhiteSpace(state.CurContract) &&
@@ -372,7 +572,6 @@ namespace ZenPlatform
 		{
 			var state = new AppState
 			{
-				TargetUrl = _core.ClientCtrl.TargetUrl,
 				CurContract = _core.CurContract,
 				ContractYear = _core.ContractYear,
 				ContractMonth = _core.ContractMonth,
@@ -533,7 +732,10 @@ namespace ZenPlatform
 
 			if (manager.IsBacktestActive)
 			{
-				LogHeaderStatusText.Text = $"{manager.BacktestProgressPercent:0}%";
+				var status = string.IsNullOrWhiteSpace(manager.BacktestStatusText)
+					? "回測中"
+					: manager.BacktestStatusText;
+				LogHeaderStatusText.Text = $"{status} ({manager.BacktestProgressPercent:0}%)";
 				LogHeaderStatusText.Visibility = Visibility.Visible;
 				LogHeaderStatusBorder.Visibility = Visibility.Visible;
 				LogHeaderStatusRow.Height = new GridLength(22);
@@ -563,6 +765,7 @@ namespace ZenPlatform
 			UpdateBrokerStatus();
 			UpdateUserStatus();
 			UpdatePriceSourceStatus();
+			RefreshChartContractIfChanged();
 			var exchangeTime = _core.TimeCtrl.ExchangeTime;
 			var stamp = new DateTime(exchangeTime.Year, exchangeTime.Month, exchangeTime.Day, exchangeTime.Hour, exchangeTime.Minute, exchangeTime.Second, exchangeTime.Kind);
 			if (_lastClockStamp == null || _lastClockStamp.Value != stamp)
@@ -571,6 +774,18 @@ namespace ZenPlatform
 				var timeText = exchangeTime.ToString("ddd HH:mm:ss");
 				ClockText.Text = timeText;
 			}
+		}
+
+		private void RefreshChartContractIfChanged()
+		{
+			var key = $"{_core.CurContract}|{_core.ContractYear:D4}|{_core.ContractMonth:D2}";
+			if (string.Equals(_lastChartContractKey, key, StringComparison.Ordinal))
+			{
+				return;
+			}
+
+			_lastChartContractKey = key;
+			UpdateChartContract();
 		}
 
 		private void UpdateChartContract()
@@ -586,6 +801,12 @@ namespace ZenPlatform
 
 		private void OnChartContractChangeRequested()
 		{
+			if (_core.SessionManagers.Any(m => m.IsStrategyRunning))
+			{
+				MessageBoxWindow.Show(this, "策略執行中不可切換交易合約。", "交易合約");
+				return;
+			}
+
 			var dialog = new DdeSubscribeWindow
 			{
 				Owner = this,
@@ -782,7 +1003,7 @@ namespace ZenPlatform
 			DdePriceStatusText.Text = currentSource == Core.PriceManager.PriceSource.Dde ? "▶DDE報價" : "DDE報價";
 			NetPriceStatusText.Text = currentSource == Core.PriceManager.PriceSource.Network ? "▶網路報價" : "網路報價";
 
-			var ddeAvailable = _core.IsBrokerConnected && _core.IsDdeConnected;
+			var ddeAvailable = _core.IsDdeConnected;
 			var netAvailable = _core.ClientCtrl.IsLoggedIn;
 			DdePriceStatusText.Foreground = ddeAvailable
 				? (System.Windows.Media.Brush)FindResource("BrushMarketOpen")
@@ -871,7 +1092,7 @@ namespace ZenPlatform
 
 		private void OnHolidayScheduleClick(object sender, MouseButtonEventArgs e)
 		{
-			var path = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "台灣國定假日定義.txt");
+			var path = TaifexHisDbManager.MagistockStoragePaths.TradingCalendarPath;
 			try
 			{
 				Process.Start(new ProcessStartInfo
@@ -1117,12 +1338,23 @@ namespace ZenPlatform
 
 		private void OnSupportClick(object sender, MouseButtonEventArgs e)
 		{
-			var supportWindow = new SupportQrWindow
+			try
 			{
-				Owner = this,
-				WindowStartupLocation = WindowStartupLocation.CenterOwner
-			};
-			supportWindow.ShowDialog();
+				Process.Start(new ProcessStartInfo
+				{
+					FileName = "https://www.magistock.com/custom.html",
+					UseShellExecute = true
+				});
+			}
+			catch
+			{
+				MessageBoxWindow.Show(this, "無法開啟客服頁面。", "聯絡客服");
+			}
+		}
+
+		private void OnUpdateStatusClick(object sender, MouseButtonEventArgs e)
+		{
+			MessageBoxWindow.Show(this, "更新安裝程式將在您關閉程式後進行更新", "有可用更新");
 		}
 
 		private void OnPurchaseReminderNeeded(string message)

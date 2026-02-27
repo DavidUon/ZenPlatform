@@ -1,120 +1,776 @@
 <Window x:Class="ZenPlatform.StrategySettingsWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:strategy="clr-namespace:ZenPlatform.Strategy"
         Title="策略設定"
         SizeToContent="WidthAndHeight"
         WindowStartupLocation="CenterOwner"
         ResizeMode="NoResize"
-        Background="{StaticResource BrushSurface}">
+        Background="{StaticResource BrushSurface}"
+        ShowInTaskbar="False">
     <Border Padding="16">
         <Grid>
             <Grid.RowDefinitions>
-                <RowDefinition Height="Auto" />
                 <RowDefinition Height="*" />
                 <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
 
-            <Grid Grid.Row="1">
+            <Grid Grid.Row="0">
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="120" />
-                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="1.8*" />
+                    <ColumnDefinition Width="12" />
+                    <ColumnDefinition Width="1*" />
+                    <ColumnDefinition Width="12" />
+                    <ColumnDefinition Width="1*" />
                 </Grid.ColumnDefinitions>
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="Auto" />
-                </Grid.RowDefinitions>
 
-                <TextBlock Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="2" Text="指標設定"
-                           Margin="0,0,0,8" FontWeight="Bold"
-                           FontSize="17"
-                           Foreground="{StaticResource BrushText}"
-                           HorizontalAlignment="Center"
-                           TextAlignment="Center" />
+                <Border Grid.Column="0"
+                        Background="{StaticResource BrushSurface}"
+                        BorderBrush="{StaticResource BrushInputBorder}"
+                        BorderThickness="1"
+                        CornerRadius="6"
+                        Padding="12">
+                    <StackPanel>
+                        <TextBlock Text="下單設定"
+                                   Margin="0,0,0,8"
+                                   FontWeight="Bold"
+                                   Foreground="{StaticResource BrushText}"
+                                   Background="#323232"
+                                   TextAlignment="Center"
+                                   HorizontalAlignment="Stretch"
+                                   Padding="0,2" />
+                        <StackPanel>
+                            <DockPanel Margin="0,0,0,6">
+                                <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" VerticalAlignment="Center">
+                                    <TextBlock Text="K線週期" Width="90" VerticalAlignment="Center" />
+                                    <TextBox x:Name="KbarPeriodBox"
+                                             Background="{StaticResource BrushInputBackground}"
+                                             Foreground="{StaticResource BrushText}"
+                                             BorderBrush="{StaticResource BrushInputBorder}"
+                                             TextAlignment="Center"
+                                             Width="72"
+                                             HorizontalAlignment="Left" />
+                                </StackPanel>
+                            </DockPanel>
 
-                <TextBlock Grid.Row="1" Grid.Column="0" Text="K線週期" Margin="0,4" />
-                <TextBox Grid.Row="1" Grid.Column="1" x:Name="KbarPeriodBox" Margin="0,4"
-                         Background="{StaticResource BrushInputBackground}"
-                         Foreground="{StaticResource BrushText}"
-                         BorderBrush="{StaticResource BrushInputBorder}"
-                         TextAlignment="Center" />
+                            <DockPanel Margin="0,0,0,6">
+                                <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" VerticalAlignment="Center">
+                                    <TextBlock Text="下單口數" Width="90" VerticalAlignment="Center" />
+                                    <TextBox x:Name="OrderSizeBox"
+                                             Background="{StaticResource BrushInputBackground}"
+                                             Foreground="{StaticResource BrushText}"
+                                             BorderBrush="{StaticResource BrushInputBorder}"
+                                             TextAlignment="Center"
+                                             Width="72"
+                                             HorizontalAlignment="Left" />
+                                </StackPanel>
+                            </DockPanel>
 
-                <TextBlock Grid.Row="2" Grid.Column="0" Text="K參數" Margin="0,4" />
-                <TextBox Grid.Row="2" Grid.Column="1" x:Name="KPeriodBox" Margin="0,4"
-                         Background="{StaticResource BrushInputBackground}"
-                         Foreground="{StaticResource BrushText}"
-                         BorderBrush="{StaticResource BrushInputBorder}"
-                         TextAlignment="Center" />
+                            <DockPanel Margin="0,0,0,6">
+                                <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" VerticalAlignment="Center">
+                                    <TextBlock Text="最大任務數" Width="90" VerticalAlignment="Center" />
+                                    <TextBox x:Name="MaxSessionBox"
+                                             Background="{StaticResource BrushInputBackground}"
+                                             Foreground="{StaticResource BrushText}"
+                                             BorderBrush="{StaticResource BrushInputBorder}"
+                                             TextAlignment="Center"
+                                             Width="72"
+                                             HorizontalAlignment="Left" />
+                                </StackPanel>
+                            </DockPanel>
 
-                <TextBlock Grid.Row="3" Grid.Column="0" Text="D參數" Margin="0,4" />
-                <TextBox Grid.Row="3" Grid.Column="1" x:Name="DPeriodBox" Margin="0,4"
-                         Background="{StaticResource BrushInputBackground}"
-                         Foreground="{StaticResource BrushText}"
-                         BorderBrush="{StaticResource BrushInputBorder}"
-                         TextAlignment="Center" />
+                            <DockPanel Margin="0,0,0,6">
+                                <Button DockPanel.Dock="Right"
+                                        Width="18"
+                                        Height="18"
+                                        Style="{StaticResource QuestionIconButtonStyle}"
+                                        Tag="order.trend_mode"
+                                        Click="OnHelpButtonClick"
+                                        MinWidth="18"
+                                        MinHeight="18"
+                                        MaxWidth="18"
+                                        MaxHeight="18"
+                                        Margin="8,0,0,0"
+                                        Padding="0"
+                                        HorizontalAlignment="Right"
+                                        VerticalAlignment="Center">
+                                    <Image Source="/MVVM/Assets/question.png" Stretch="Uniform" />
+                                </Button>
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                    <TextBlock Text="趨勢判定" Width="90" VerticalAlignment="Center" />
+                                    <ComboBox x:Name="TrendModeBox"
+                                              Background="{StaticResource BrushInputBackground}"
+                                              Foreground="{StaticResource BrushText}"
+                                              BorderBrush="{StaticResource BrushInputBorder}"
+                                              HorizontalContentAlignment="Center"
+                                              Width="150"
+                                              HorizontalAlignment="Left"
+                                              VerticalAlignment="Center"
+                                              SelectionChanged="OnTrendModeChanged">
+                                        <ComboBoxItem Content="系統自動判定" Tag="{x:Static strategy:TrendMode.Auto}" />
+                                        <ComboBoxItem Content="無方向判定" Tag="{x:Static strategy:TrendMode.None}" />
+                                        <ComboBoxItem Content="均線判定" Tag="{x:Static strategy:TrendMode.MovingAverage}" />
+                                        <ComboBoxItem Content="強制判定" Tag="{x:Static strategy:TrendMode.Force}" />
+                                    </ComboBox>
+                                </StackPanel>
+                            </DockPanel>
 
-                <TextBlock Grid.Row="4" Grid.Column="0" Text="RSV參數" Margin="0,4" />
-                <TextBox Grid.Row="4" Grid.Column="1" x:Name="RsvPeriodBox" Margin="0,4"
-                         Background="{StaticResource BrushInputBackground}"
-                         Foreground="{StaticResource BrushText}"
-                         BorderBrush="{StaticResource BrushInputBorder}"
-                         TextAlignment="Center" />
+                            <DockPanel x:Name="MaRowPanel" Margin="0,0,0,6">
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                    <TextBlock Text="" Width="90" VerticalAlignment="Center" />
+                                    <TextBlock Text="均線" Margin="0,0,8,0" VerticalAlignment="Center" />
+                                    <TextBox x:Name="MaPeriodBox" Width="72"
+                                             Background="{StaticResource BrushInputBackground}"
+                                             Foreground="{StaticResource BrushText}"
+                                             BorderBrush="{StaticResource BrushInputBorder}"
+                                             TextAlignment="Center"
+                                             HorizontalAlignment="Left" />
+                                </StackPanel>
+                            </DockPanel>
 
-                <TextBlock Grid.Row="5" Grid.Column="0" Grid.ColumnSpan="2" Text="下單設定"
-                           Margin="0,8,0,8" FontWeight="Bold"
-                           FontSize="17"
-                           Foreground="{StaticResource BrushText}"
-                           HorizontalAlignment="Center"
-                           TextAlignment="Center" />
+                            <DockPanel x:Name="ForceRowPanel" Margin="0,0,0,6">
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                    <TextBlock Text="" Width="90" VerticalAlignment="Center" />
+                                    <RadioButton x:Name="ForceLongRadio" Content="強制多方" GroupName="ForceTrend" Margin="0,0,12,0">
+                                        <RadioButton.Style>
+                                            <Style TargetType="RadioButton">
+                                                <Style.Triggers>
+                                                    <Trigger Property="IsEnabled" Value="False">
+                                                        <Setter Property="Foreground" Value="#323232" />
+                                                    </Trigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </RadioButton.Style>
+                                    </RadioButton>
+                                    <RadioButton x:Name="ForceShortRadio" Content="強制空方" GroupName="ForceTrend">
+                                        <RadioButton.Style>
+                                            <Style TargetType="RadioButton">
+                                                <Style.Triggers>
+                                                    <Trigger Property="IsEnabled" Value="False">
+                                                        <Setter Property="Foreground" Value="#323232" />
+                                                    </Trigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </RadioButton.Style>
+                                    </RadioButton>
+                                </StackPanel>
+                            </DockPanel>
 
-                <TextBlock Grid.Row="6" Grid.Column="0" Text="下單口數" Margin="0,4" />
-                <TextBox Grid.Row="6" Grid.Column="1" x:Name="OrderSizeBox" Margin="0,4"
-                         Background="{StaticResource BrushInputBackground}"
-                         Foreground="{StaticResource BrushText}"
-                         BorderBrush="{StaticResource BrushInputBorder}"
-                         TextAlignment="Center" />
+                            <DockPanel Margin="0,0,0,6">
+                                <Button DockPanel.Dock="Right"
+                                        Width="18"
+                                        Height="18"
+                                        Style="{StaticResource QuestionIconButtonStyle}"
+                                        Tag="order.same_direction_block"
+                                        Click="OnHelpButtonClick"
+                                        MinWidth="18"
+                                        MinHeight="18"
+                                        MaxWidth="18"
+                                        MaxHeight="18"
+                                        Margin="8,0,0,0"
+                                        Padding="0"
+                                        HorizontalAlignment="Right"
+                                        VerticalAlignment="Center">
+                                    <Image Source="/MVVM/Assets/question.png" Stretch="Uniform" />
+                                </Button>
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                    <TextBlock Text="新任務阻擋" Width="90" VerticalAlignment="Center" />
+                                    <TextBox x:Name="SameDirectionBlockMinutesBox"
+                                             Background="{StaticResource BrushInputBackground}"
+                                             Foreground="{StaticResource BrushText}"
+                                             BorderBrush="{StaticResource BrushInputBorder}"
+                                             TextAlignment="Center"
+                                             Width="50"
+                                             HorizontalAlignment="Left" />
+                                    <TextBlock Text="分鐘內" Margin="8,0,8,0" VerticalAlignment="Center" />
+                                    <TextBox x:Name="SameDirectionBlockRangeBox"
+                                             Background="{StaticResource BrushInputBackground}"
+                                             Foreground="{StaticResource BrushText}"
+                                             BorderBrush="{StaticResource BrushInputBorder}"
+                                             TextAlignment="Center"
+                                             Width="50"
+                                             HorizontalAlignment="Left" />
+                                    <TextBlock Text="上下點範圍內不建立同方向任務" Margin="8,0,0,0" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </DockPanel>
 
-                <TextBlock Grid.Row="7" Grid.Column="0" Text="最大任務數" Margin="0,4" />
-                <TextBox Grid.Row="7" Grid.Column="1" x:Name="MaxSessionBox" Margin="0,4"
-                         Background="{StaticResource BrushInputBackground}"
-                         Foreground="{StaticResource BrushText}"
-                         BorderBrush="{StaticResource BrushInputBorder}"
-                         TextAlignment="Center" />
+                            <DockPanel Margin="0,0,0,6">
+                                <Button DockPanel.Dock="Right"
+                                        Width="18"
+                                        Height="18"
+                                        Style="{StaticResource QuestionIconButtonStyle}"
+                                        Tag="order.create_time_window"
+                                        Click="OnHelpButtonClick"
+                                        MinWidth="18"
+                                        MinHeight="18"
+                                        MaxWidth="18"
+                                        MaxHeight="18"
+                                        Margin="8,0,0,0"
+                                        Padding="0"
+                                        HorizontalAlignment="Right"
+                                        VerticalAlignment="Center">
+                                    <Image Source="/MVVM/Assets/question.png" Stretch="Uniform" />
+                                </Button>
+                                <TextBlock Text="允許建立任務時間" VerticalAlignment="Center" />
+                            </DockPanel>
 
-                <TextBlock Grid.Row="8" Grid.Column="0" Grid.ColumnSpan="2" Text="交易參數"
-                           Margin="0,8,0,8" FontWeight="Bold"
-                           FontSize="17"
-                           Foreground="{StaticResource BrushText}"
-                           HorizontalAlignment="Center"
-                           TextAlignment="Center" />
+                            <DockPanel Margin="0,0,0,6">
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                    <TextBlock Text="日盤" Width="90" VerticalAlignment="Center" />
+                                    <TextBox x:Name="DayStartBox" Width="72"
+                                             Background="{StaticResource BrushInputBackground}"
+                                             Foreground="{StaticResource BrushText}"
+                                             BorderBrush="{StaticResource BrushInputBorder}"
+                                             TextAlignment="Center" />
+                                    <TextBlock Text="~" Margin="6,0" VerticalAlignment="Center" />
+                                    <TextBox x:Name="DayEndBox" Width="72"
+                                             Background="{StaticResource BrushInputBackground}"
+                                             Foreground="{StaticResource BrushText}"
+                                             BorderBrush="{StaticResource BrushInputBorder}"
+                                             TextAlignment="Center" />
+                                </StackPanel>
+                            </DockPanel>
 
-                <TextBlock Grid.Row="9" Grid.Column="0" Text="停利點數" Margin="0,4" />
-                <TextBox Grid.Row="9" Grid.Column="1" x:Name="TakeProfitBox" Margin="0,4"
-                         Background="{StaticResource BrushInputBackground}"
-                         Foreground="{StaticResource BrushText}"
-                         BorderBrush="{StaticResource BrushInputBorder}"
-                         TextAlignment="Center" />
+                            <DockPanel Margin="0,0,0,6">
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                    <TextBlock Text="夜盤" Width="90" VerticalAlignment="Center" />
+                                    <TextBox x:Name="NightStartBox" Width="72"
+                                             Background="{StaticResource BrushInputBackground}"
+                                             Foreground="{StaticResource BrushText}"
+                                             BorderBrush="{StaticResource BrushInputBorder}"
+                                             TextAlignment="Center" />
+                                    <TextBlock Text="~" Margin="6,0" VerticalAlignment="Center" />
+                                    <TextBox x:Name="NightEndBox" Width="72"
+                                             Background="{StaticResource BrushInputBackground}"
+                                             Foreground="{StaticResource BrushText}"
+                                             BorderBrush="{StaticResource BrushInputBorder}"
+                                             TextAlignment="Center" />
+                                </StackPanel>
+                            </DockPanel>
 
-                <TextBlock Grid.Row="10" Grid.Column="0" Text="最大反手次數" Margin="0,4" />
-                <TextBox Grid.Row="10" Grid.Column="1" x:Name="MaxReverseBox" Margin="0,4"
-                         Background="{StaticResource BrushInputBackground}"
-                         Foreground="{StaticResource BrushText}"
-                         BorderBrush="{StaticResource BrushInputBorder}"
-                         TextAlignment="Center" />
+                            <DockPanel Margin="0,0,0,6">
+                                <Button DockPanel.Dock="Right"
+                                        Width="18"
+                                        Height="18"
+                                        Style="{StaticResource QuestionIconButtonStyle}"
+                                        Tag="order.close_before_session_end"
+                                        Click="OnHelpButtonClick"
+                                        MinWidth="18"
+                                        MinHeight="18"
+                                        MaxWidth="18"
+                                        MaxHeight="18"
+                                        Margin="8,0,0,0"
+                                        Padding="0"
+                                        HorizontalAlignment="Right"
+                                        VerticalAlignment="Center">
+                                    <Image Source="/MVVM/Assets/question.png" Stretch="Uniform" />
+                                </Button>
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                    <CheckBox x:Name="CloseBeforeDaySessionEndCheckBox"
+                                              Margin="0,0,8,0"
+                                              VerticalAlignment="Center"
+                                              Checked="OnCloseBeforeSessionEndChanged"
+                                              Unchecked="OnCloseBeforeSessionEndChanged" />
+                                    <TextBlock Text="早盤收盤前平倉" Margin="0,0,8,0" VerticalAlignment="Center" />
+                                    <TextBox x:Name="DayCloseBeforeTimeBox" Width="72"
+                                             Background="{StaticResource BrushInputBackground}"
+                                             Foreground="{StaticResource BrushText}"
+                                             BorderBrush="{StaticResource BrushInputBorder}"
+                                             TextAlignment="Center" />
+                                </StackPanel>
+                            </DockPanel>
+
+                            <DockPanel Margin="0,0,0,6">
+                                <Button DockPanel.Dock="Right"
+                                        Width="18"
+                                        Height="18"
+                                        Style="{StaticResource QuestionIconButtonStyle}"
+                                        Tag="order.close_before_session_end"
+                                        Click="OnHelpButtonClick"
+                                        MinWidth="18"
+                                        MinHeight="18"
+                                        MaxWidth="18"
+                                        MaxHeight="18"
+                                        Margin="8,0,0,0"
+                                        Padding="0"
+                                        HorizontalAlignment="Right"
+                                        VerticalAlignment="Center">
+                                    <Image Source="/MVVM/Assets/question.png" Stretch="Uniform" />
+                                </Button>
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                    <CheckBox x:Name="CloseBeforeNightSessionEndCheckBox"
+                                              Margin="0,0,8,0"
+                                              VerticalAlignment="Center"
+                                              Checked="OnCloseBeforeSessionEndChanged"
+                                              Unchecked="OnCloseBeforeSessionEndChanged" />
+                                    <TextBlock Text="晚盤收盤前平倉" Margin="0,0,8,0" VerticalAlignment="Center" />
+                                    <TextBox x:Name="NightCloseBeforeTimeBox" Width="72"
+                                             Background="{StaticResource BrushInputBackground}"
+                                             Foreground="{StaticResource BrushText}"
+                                             BorderBrush="{StaticResource BrushInputBorder}"
+                                             TextAlignment="Center" />
+                                </StackPanel>
+                            </DockPanel>
+
+                            <DockPanel Margin="0,0,0,6">
+                                <Button DockPanel.Dock="Right"
+                                        Width="18"
+                                        Height="18"
+                                        Style="{StaticResource QuestionIconButtonStyle}"
+                                        Tag="order.close_before_long_holiday"
+                                        Click="OnHelpButtonClick"
+                                        MinWidth="18"
+                                        MinHeight="18"
+                                        MaxWidth="18"
+                                        MaxHeight="18"
+                                        Margin="8,0,0,0"
+                                        Padding="0"
+                                        HorizontalAlignment="Right"
+                                        VerticalAlignment="Center">
+                                    <Image Source="/MVVM/Assets/question.png" Stretch="Uniform" />
+                                </Button>
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                    <CheckBox x:Name="CloseBeforeLongHolidayCheckBox"
+                                              Margin="0,0,8,0"
+                                              VerticalAlignment="Center"
+                                              Checked="OnCloseBeforeLongHolidayChanged"
+                                              Unchecked="OnCloseBeforeLongHolidayChanged" />
+                                    <TextBlock Text="連續假日前平倉" Margin="0,0,8,0" VerticalAlignment="Center" />
+                                    <TextBox x:Name="CloseBeforeLongHolidayTimeBox" Width="72"
+                                             Background="{StaticResource BrushInputBackground}"
+                                             Foreground="{StaticResource BrushText}"
+                                             BorderBrush="{StaticResource BrushInputBorder}"
+                                             TextAlignment="Center" />
+                                </StackPanel>
+                            </DockPanel>
+
+                            <DockPanel Margin="0,0,0,6">
+                                <Button DockPanel.Dock="Right"
+                                        Width="18"
+                                        Height="18"
+                                        Style="{StaticResource QuestionIconButtonStyle}"
+                                        Tag="order.auto_rollover_when_holding"
+                                        Click="OnHelpButtonClick"
+                                        MinWidth="18"
+                                        MinHeight="18"
+                                        MaxWidth="18"
+                                        MaxHeight="18"
+                                        Margin="8,0,0,0"
+                                        Padding="0"
+                                        HorizontalAlignment="Right"
+                                        VerticalAlignment="Center">
+                                    <Image Source="/MVVM/Assets/question.png" Stretch="Uniform" />
+                                </Button>
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                    <CheckBox x:Name="AutoRolloverWhenHoldingCheckBox"
+                                              Margin="0,0,8,0"
+                                              VerticalAlignment="Center"
+                                              Checked="OnAutoRolloverChanged"
+                                              Unchecked="OnAutoRolloverChanged" />
+                                    <TextBlock Text="結算日自動換月" Margin="0,0,8,0" VerticalAlignment="Center" />
+                                    <TextBox x:Name="AutoRolloverTimeBox"
+                                             Background="{StaticResource BrushInputBackground}"
+                                             Foreground="{StaticResource BrushText}"
+                                             BorderBrush="{StaticResource BrushInputBorder}"
+                                             TextAlignment="Center"
+                                             Width="72"
+                                             HorizontalAlignment="Left" />
+                                </StackPanel>
+                            </DockPanel>
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
+                <Border Grid.Column="2"
+                        Background="{StaticResource BrushSurface}"
+                        BorderBrush="{StaticResource BrushInputBorder}"
+                        BorderThickness="1"
+                        CornerRadius="6"
+                        Padding="12">
+                    <StackPanel>
+                        <TextBlock Text="停利設定"
+                                   Margin="0,0,0,8"
+                                   FontWeight="Bold"
+                                   Foreground="{StaticResource BrushText}"
+                                   Background="#323232"
+                                   TextAlignment="Center"
+                                   HorizontalAlignment="Stretch"
+                                   Padding="0,2" />
+                        <StackPanel>
+                            <DockPanel Margin="0,0,0,6">
+                                <Button DockPanel.Dock="Right"
+                                        Width="18" Height="18"
+                                        Style="{StaticResource QuestionIconButtonStyle}"
+                                        Tag="tp.total_points"
+                                        Click="OnHelpButtonClick"
+                                        Margin="8,0,0,0" Padding="0"
+                                        HorizontalAlignment="Right" VerticalAlignment="Center">
+                                    <Image Source="/MVVM/Assets/question.png" Stretch="Uniform" />
+                                </Button>
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                    <CheckBox x:Name="TakeProfitFixedRadio"
+                                              Margin="0,0,8,0"
+                                              VerticalAlignment="Center"
+                                              Checked="OnTakeProfitModeChanged"
+                                              Unchecked="OnTakeProfitModeChanged" />
+                                    <TextBlock Text="任務總停利點數" Margin="0,0,8,0" VerticalAlignment="Center" />
+                                    <TextBox x:Name="TakeProfitBox"
+                                             Background="{StaticResource BrushInputBackground}"
+                                             Foreground="{StaticResource BrushText}"
+                                             BorderBrush="{StaticResource BrushInputBorder}"
+                                             TextAlignment="Center"
+                                             Width="50"
+                                             HorizontalAlignment="Left" />
+                                </StackPanel>
+                            </DockPanel>
+
+                            <DockPanel Margin="0,0,0,6">
+                                <Button DockPanel.Dock="Right"
+                                        Width="18" Height="18"
+                                        Style="{StaticResource QuestionIconButtonStyle}"
+                                        Tag="tp.floating_points"
+                                        Click="OnHelpButtonClick"
+                                        Margin="8,0,0,0" Padding="0"
+                                        HorizontalAlignment="Right" VerticalAlignment="Center">
+                                    <Image Source="/MVVM/Assets/question.png" Stretch="Uniform" />
+                                </Button>
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                    <CheckBox x:Name="TakeProfitAutoRadio"
+                                              Margin="0,0,8,0"
+                                              VerticalAlignment="Center"
+                                              Checked="OnTakeProfitModeChanged"
+                                              Unchecked="OnTakeProfitModeChanged" />
+                                    <TextBlock Text="固定浮動損益停利" Margin="0,0,8,0" VerticalAlignment="Center" />
+                                    <TextBox x:Name="AutoTakeProfitBox"
+                                             Background="{StaticResource BrushInputBackground}"
+                                             Foreground="{StaticResource BrushText}"
+                                             BorderBrush="{StaticResource BrushInputBorder}"
+                                             TextAlignment="Center"
+                                             Width="50"
+                                             HorizontalAlignment="Left" />
+                                </StackPanel>
+                            </DockPanel>
+
+                            <DockPanel Margin="0,0,0,6">
+                                <Button DockPanel.Dock="Right"
+                                        Width="18" Height="18"
+                                        Style="{StaticResource QuestionIconButtonStyle}"
+                                        Tag="tp.cover_loss"
+                                        Click="OnHelpButtonClick"
+                                        Margin="8,0,0,0" Padding="0"
+                                        HorizontalAlignment="Right" VerticalAlignment="Center">
+                                    <Image Source="/MVVM/Assets/question.png" Stretch="Uniform" />
+                                </Button>
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                    <CheckBox x:Name="CoverLossBeforeTakeProfitCheckBox"
+                                              Margin="0,0,8,0"
+                                              VerticalAlignment="Center"
+                                              Checked="OnTakeProfitModeChanged"
+                                              Unchecked="OnTakeProfitModeChanged" />
+                                    <TextBlock Text="當損失超過" Margin="0,0,8,0" VerticalAlignment="Center" />
+                                    <TextBox x:Name="CoverLossTriggerPointsBox"
+                                             Background="{StaticResource BrushInputBackground}"
+                                             Foreground="{StaticResource BrushText}"
+                                             BorderBrush="{StaticResource BrushInputBorder}"
+                                             TextAlignment="Center"
+                                             Width="50"
+                                             HorizontalAlignment="Left" />
+                                    <TextBlock Text="點後，獲利補足平倉" Margin="8,0,0,0" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </DockPanel>
+
+                            <DockPanel Margin="0,0,0,6">
+                                <Button DockPanel.Dock="Right"
+                                        Width="18" Height="18"
+                                        Style="{StaticResource QuestionIconButtonStyle}"
+                                        Tag="tp.rise_from_worst"
+                                        Click="OnHelpButtonClick"
+                                        Margin="8,0,0,0" Padding="0"
+                                        HorizontalAlignment="Right" VerticalAlignment="Center">
+                                    <Image Source="/MVVM/Assets/question.png" Stretch="Uniform" />
+                                </Button>
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                    <CheckBox x:Name="ExitOnTotalProfitRiseCheckBox"
+                                              Margin="0,0,8,0"
+                                              VerticalAlignment="Center"
+                                              Checked="OnTakeProfitModeChanged"
+                                              Unchecked="OnTakeProfitModeChanged" />
+                                    <TextBlock Text="任務總損益低於" Margin="0,0,8,0" VerticalAlignment="Center" />
+                                    <TextBox x:Name="ExitOnTotalProfitRiseArmBelowPointsBox"
+                                             Background="{StaticResource BrushInputBackground}"
+                                             Foreground="{StaticResource BrushText}"
+                                             BorderBrush="{StaticResource BrushInputBorder}"
+                                             TextAlignment="Center"
+                                             Width="50"
+                                             HorizontalAlignment="Left" />
+                                    <TextBlock Text="點後，拉回" Margin="8,0,8,0" VerticalAlignment="Center" />
+                                    <TextBox x:Name="ExitOnTotalProfitRisePointsBox"
+                                             Background="{StaticResource BrushInputBackground}"
+                                             Foreground="{StaticResource BrushText}"
+                                             BorderBrush="{StaticResource BrushInputBorder}"
+                                             TextAlignment="Center"
+                                             Width="50"
+                                             HorizontalAlignment="Left" />
+                                    <TextBlock Text="點後平倉" Margin="8,0,0,0" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </DockPanel>
+
+                            <DockPanel Margin="0,0,0,6">
+                                <Button DockPanel.Dock="Right"
+                                        Width="18" Height="18"
+                                        Style="{StaticResource QuestionIconButtonStyle}"
+                                        Tag="tp.total_profit_drop_after_trigger"
+                                        Click="OnHelpButtonClick"
+                                        Margin="8,0,0,0" Padding="0"
+                                        HorizontalAlignment="Right" VerticalAlignment="Center">
+                                    <Image Source="/MVVM/Assets/question.png" Stretch="Uniform" />
+                                </Button>
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                    <CheckBox x:Name="ExitOnTotalProfitDropAfterTriggerCheckBox"
+                                              Margin="0,0,8,0"
+                                              VerticalAlignment="Center"
+                                              Checked="OnTakeProfitModeChanged"
+                                              Unchecked="OnTakeProfitModeChanged" />
+                                    <TextBlock Text="任務總損益超過" Margin="0,0,8,0" VerticalAlignment="Center" />
+                                    <TextBox x:Name="ExitOnTotalProfitDropTriggerPointsBox"
+                                             Background="{StaticResource BrushInputBackground}"
+                                             Foreground="{StaticResource BrushText}"
+                                             BorderBrush="{StaticResource BrushInputBorder}"
+                                             TextAlignment="Center"
+                                             Width="50"
+                                             HorizontalAlignment="Left" />
+                                    <TextBlock Text="點後，低於" Margin="8,0,8,0" VerticalAlignment="Center" />
+                                    <TextBox x:Name="ExitOnTotalProfitDropExitPointsBox"
+                                             Background="{StaticResource BrushInputBackground}"
+                                             Foreground="{StaticResource BrushText}"
+                                             BorderBrush="{StaticResource BrushInputBorder}"
+                                             TextAlignment="Center"
+                                             Width="50"
+                                             HorizontalAlignment="Left" />
+                                    <TextBlock Text="點平倉" Margin="8,0,0,0" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </DockPanel>
+
+                            <DockPanel Margin="0,0,0,6">
+                                <Button DockPanel.Dock="Right"
+                                        Width="18" Height="18"
+                                        Style="{StaticResource QuestionIconButtonStyle}"
+                                        Tag="tp.retrace_exit"
+                                        Click="OnHelpButtonClick"
+                                        Margin="8,0,0,0" Padding="0"
+                                        HorizontalAlignment="Right" VerticalAlignment="Center">
+                                    <Image Source="/MVVM/Assets/question.png" Stretch="Uniform" />
+                                </Button>
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                    <CheckBox x:Name="ProfitRetraceExitCheckBox"
+                                              Margin="0,0,8,0"
+                                              VerticalAlignment="Center"
+                                              Checked="OnTakeProfitModeChanged"
+                                              Unchecked="OnTakeProfitModeChanged" />
+                                    <TextBlock Text="獲利超過" Margin="0,0,8,0" VerticalAlignment="Center" />
+                                    <TextBox x:Name="ProfitRetraceTriggerPointsBox"
+                                             Background="{StaticResource BrushInputBackground}"
+                                             Foreground="{StaticResource BrushText}"
+                                             BorderBrush="{StaticResource BrushInputBorder}"
+                                             TextAlignment="Center"
+                                             Width="50"
+                                             HorizontalAlignment="Left" />
+                                    <TextBlock Text="點後，價格碰到均線" Margin="8,0,8,0" VerticalAlignment="Center" />
+                                    <TextBox x:Name="ProfitRetracePercentBox"
+                                             Background="{StaticResource BrushInputBackground}"
+                                             Foreground="{StaticResource BrushText}"
+                                             BorderBrush="{StaticResource BrushInputBorder}"
+                                             TextAlignment="Center"
+                                             Width="50"
+                                             HorizontalAlignment="Left" />
+                                    <TextBlock Text="MA 平倉" Margin="8,0,0,0" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </DockPanel>
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
+                <Border Grid.Column="4"
+                        Background="{StaticResource BrushSurface}"
+                        BorderBrush="{StaticResource BrushInputBorder}"
+                        BorderThickness="1"
+                        CornerRadius="6"
+                        Padding="12">
+                    <StackPanel>
+                        <TextBlock Text="停損設定"
+                                   Margin="0,0,0,8"
+                                   FontWeight="Bold"
+                                   Foreground="{StaticResource BrushText}"
+                                   Background="#323232"
+                                   TextAlignment="Center"
+                                   HorizontalAlignment="Stretch"
+                                   Padding="0,2" />
+                        <StackPanel>
+                            <DockPanel Margin="0,0,0,6">
+                                <Button DockPanel.Dock="Right"
+                                        Width="18" Height="18"
+                                        Style="{StaticResource QuestionIconButtonStyle}"
+                                        Tag="sl.fixed_points"
+                                        Click="OnHelpButtonClick"
+                                        Margin="8,0,0,0" Padding="0"
+                                        HorizontalAlignment="Right" VerticalAlignment="Center">
+                                    <Image Source="/MVVM/Assets/question.png" Stretch="Uniform" />
+                                </Button>
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                    <RadioButton x:Name="StopLossFixedRadio"
+                                                 GroupName="StopLossMode"
+                                                 Margin="0,0,8,0"
+                                                 VerticalAlignment="Center"
+                                                 Checked="OnStopLossModeChanged" />
+                                    <TextBlock Text="固定點數停損" Margin="0,0,8,0" VerticalAlignment="Center" />
+                                    <TextBox x:Name="StopLossBox"
+                                             Background="{StaticResource BrushInputBackground}"
+                                             Foreground="{StaticResource BrushText}"
+                                             BorderBrush="{StaticResource BrushInputBorder}"
+                                             TextAlignment="Center"
+                                             Width="50"
+                                             HorizontalAlignment="Left" />
+                                </StackPanel>
+                            </DockPanel>
+
+                            <DockPanel Margin="0,0,0,6">
+                                <Button DockPanel.Dock="Right"
+                                        Width="18" Height="18"
+                                        Style="{StaticResource QuestionIconButtonStyle}"
+                                        Tag="sl.auto_mode"
+                                        Click="OnHelpButtonClick"
+                                        Margin="8,0,0,0" Padding="0"
+                                        HorizontalAlignment="Right" VerticalAlignment="Center">
+                                    <Image Source="/MVVM/Assets/question.png" Stretch="Uniform" />
+                                </Button>
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                    <RadioButton x:Name="StopLossAutoRadio"
+                                                 GroupName="StopLossMode"
+                                                 Content="自動判定"
+                                                 Margin="0,0,0,0"
+                                                 VerticalAlignment="Center"
+                                                 Checked="OnStopLossModeChanged" />
+                                </StackPanel>
+                            </DockPanel>
+
+                            <DockPanel Margin="0,0,0,6">
+                                <Button DockPanel.Dock="Right"
+                                        Width="18" Height="18"
+                                        Style="{StaticResource QuestionIconButtonStyle}"
+                                        Tag="sl.reverse_after_stop"
+                                        Click="OnHelpButtonClick"
+                                        Margin="8,0,0,0" Padding="0"
+                                        HorizontalAlignment="Right" VerticalAlignment="Center">
+                                    <Image Source="/MVVM/Assets/question.png" Stretch="Uniform" />
+                                </Button>
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                    <CheckBox x:Name="ReverseAfterStopLossCheckBox"
+                                              Content="停損後反手下單"
+                                              Margin="0,0,0,0"
+                                              VerticalAlignment="Center"
+                                              Checked="OnStopLossModeChanged"
+                                              Unchecked="OnStopLossModeChanged" />
+                                </StackPanel>
+                            </DockPanel>
+
+                            <DockPanel Margin="0,0,0,6">
+                                <Button DockPanel.Dock="Right"
+                                        Width="18" Height="18"
+                                        Style="{StaticResource QuestionIconButtonStyle}"
+                                        Tag="sl.max_reverse"
+                                        Click="OnHelpButtonClick"
+                                        Margin="8,0,0,0" Padding="0"
+                                        HorizontalAlignment="Right" VerticalAlignment="Center">
+                                    <Image Source="/MVVM/Assets/question.png" Stretch="Uniform" />
+                                </Button>
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="22,0,0,0">
+                                    <TextBlock Text="最大反手次數" Margin="0,0,8,0" VerticalAlignment="Center" />
+                                    <TextBox x:Name="MaxReverseBox"
+                                             Background="{StaticResource BrushInputBackground}"
+                                             Foreground="{StaticResource BrushText}"
+                                             BorderBrush="{StaticResource BrushInputBorder}"
+                                             TextAlignment="Center"
+                                             Width="50"
+                                             HorizontalAlignment="Left" />
+                                </StackPanel>
+                            </DockPanel>
+
+                            <DockPanel Margin="0,0,0,6">
+                                <Button DockPanel.Dock="Right"
+                                        Width="18" Height="18"
+                                        Style="{StaticResource QuestionIconButtonStyle}"
+                                        Tag="sl.absolute_stop"
+                                        Click="OnHelpButtonClick"
+                                        Margin="8,0,0,0" Padding="0"
+                                        HorizontalAlignment="Right" VerticalAlignment="Center">
+                                    <Image Source="/MVVM/Assets/question.png" Stretch="Uniform" />
+                                </Button>
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                    <CheckBox x:Name="AbsoluteStopLossCheckBox"
+                                              Margin="0,0,8,0"
+                                              VerticalAlignment="Center"
+                                              Checked="OnStopLossModeChanged"
+                                              Unchecked="OnStopLossModeChanged" />
+                                    <TextBlock Text="絕對停損" Margin="0,0,8,0" VerticalAlignment="Center" />
+                                    <TextBox x:Name="AbsoluteStopLossBox"
+                                             Background="{StaticResource BrushInputBackground}"
+                                             Foreground="{StaticResource BrushText}"
+                                             BorderBrush="{StaticResource BrushInputBorder}"
+                                             TextAlignment="Center"
+                                             Width="50"
+                                             HorizontalAlignment="Left" />
+                                </StackPanel>
+                            </DockPanel>
+
+                            <DockPanel Margin="0,0,0,6">
+                                <Button DockPanel.Dock="Right"
+                                        Width="18" Height="18"
+                                        Style="{StaticResource QuestionIconButtonStyle}"
+                                        Tag="sl.retrace_exit"
+                                        Click="OnHelpButtonClick"
+                                        Margin="8,0,0,0" Padding="0"
+                                        HorizontalAlignment="Right" VerticalAlignment="Center">
+                                    <Image Source="/MVVM/Assets/question.png" Stretch="Uniform" />
+                                </Button>
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                    <CheckBox x:Name="LossRetraceExitCheckBox"
+                                              Margin="0,0,8,0"
+                                              VerticalAlignment="Center"
+                                              Checked="OnStopLossModeChanged"
+                                              Unchecked="OnStopLossModeChanged" />
+                                    <TextBlock Text="損失超過" Margin="0,0,8,0" VerticalAlignment="Center" />
+                                    <TextBox x:Name="LossRetraceTriggerPointsBox"
+                                             Background="{StaticResource BrushInputBackground}"
+                                             Foreground="{StaticResource BrushText}"
+                                             BorderBrush="{StaticResource BrushInputBorder}"
+                                             TextAlignment="Center"
+                                             Width="50"
+                                             HorizontalAlignment="Left" />
+                                    <TextBlock Text="點後，價格碰到均線" Margin="8,0,8,0" VerticalAlignment="Center" />
+                                    <TextBox x:Name="LossRetracePercentBox"
+                                             Background="{StaticResource BrushInputBackground}"
+                                             Foreground="{StaticResource BrushText}"
+                                             BorderBrush="{StaticResource BrushInputBorder}"
+                                             TextAlignment="Center"
+                                             Width="50"
+                                             HorizontalAlignment="Left" />
+                                    <TextBlock Text="MA 平倉" Margin="8,0,0,0" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </DockPanel>
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
             </Grid>
 
-            <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
-                <Button Content="確定" Width="90" Margin="0,0,12,0" Click="OnOkClick" />
-                <Button Content="取消" Width="90" Click="OnCancelClick" />
-            </StackPanel>
+            <Grid Grid.Row="1" Margin="0,12,0,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <Button Grid.Column="1" Content="確定" Width="90" Margin="0,0,12,0" Click="OnOkClick" />
+                <Button Grid.Column="2" Content="取消" Width="90" Click="OnCancelClick" />
+            </Grid>
         </Grid>
     </Border>
 </Window>

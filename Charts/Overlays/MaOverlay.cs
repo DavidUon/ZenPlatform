@@ -36,7 +36,10 @@ namespace Charts
         public void OnDataChanged(List<GraphKBar> bars)
         {
             _bars = bars;
-            Recalc();
+            if (!TryLoadFromIndicators())
+            {
+                Recalc();
+            }
         }
 
         public void OnViewportChanged(int visibleStart, int visibleCount, double spacing)
@@ -121,6 +124,22 @@ namespace Charts
                     _bars[i].Indicators[key] = (decimal)_ma[i];
                 }
             }
+        }
+
+        private bool TryLoadFromIndicators()
+        {
+            if (_bars.Count == 0) return false;
+            string key = _maType == "EMA" ? $"EMA{_period}" : $"MA{_period}";
+            _ma = new double[_bars.Count];
+            for (int i = 0; i < _bars.Count; i++)
+            {
+                if (_bars[i].Indicators == null || !_bars[i].Indicators.TryGetValue(key, out var v))
+                {
+                    return false;
+                }
+                _ma[i] = (double)v;
+            }
+            return true;
         }
     }
 }

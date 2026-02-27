@@ -1,6 +1,6 @@
 using System;
 using System.Collections.Generic;
-using System.IO;
+using TaifexHisDbManager;
 
 namespace ZenPlatform.Core.Exchanges
 {
@@ -24,7 +24,7 @@ namespace ZenPlatform.Core.Exchanges
         public Taifex(string? tradingCalendarPath = null)
         {
             _calendarPath = string.IsNullOrWhiteSpace(tradingCalendarPath)
-                ? Path.Combine(AppContext.BaseDirectory, "台灣國定假日定義.txt")
+                ? MagistockStoragePaths.TradingCalendarPath
                 : tradingCalendarPath;
             try
             {

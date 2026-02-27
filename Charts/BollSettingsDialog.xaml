@@ -3,7 +3,8 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="布林通道參數設定" WindowStartupLocation="CenterOwner" SizeToContent="WidthAndHeight"
         ResizeMode="NoResize" Background="#101014" Foreground="#E8E8E8"
-        TextOptions.TextFormattingMode="Display" TextOptions.TextRenderingMode="ClearType" SnapsToDevicePixels="True">
+        TextOptions.TextFormattingMode="Display" TextOptions.TextRenderingMode="ClearType" SnapsToDevicePixels="True"
+        ShowInTaskbar="False">
     <Window.Resources>
         <SolidColorBrush x:Key="PanelBg" Color="#18181D"/>
         <SolidColorBrush x:Key="InputBg" Color="#202027"/>

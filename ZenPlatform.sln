@@ -21,8 +21,6 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ZClientCtrl", "Client\ZClie
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TaifexHisDbManager", "TaifexHisDbManager\TaifexHisDbManager.csproj", "{A1205963-29C2-496A-A629-6194961909AE}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Navigator", "Navigator\Navigator.csproj", "{B5D5FFF9-C4C7-4397-8366-5F4CBCE18AD6}"
-EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -65,10 +63,6 @@ Global
 		{A1205963-29C2-496A-A629-6194961909AE}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{A1205963-29C2-496A-A629-6194961909AE}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{A1205963-29C2-496A-A629-6194961909AE}.Release|Any CPU.Build.0 = Release|Any CPU
-		{B5D5FFF9-C4C7-4397-8366-5F4CBCE18AD6}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{B5D5FFF9-C4C7-4397-8366-5F4CBCE18AD6}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{B5D5FFF9-C4C7-4397-8366-5F4CBCE18AD6}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{B5D5FFF9-C4C7-4397-8366-5F4CBCE18AD6}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

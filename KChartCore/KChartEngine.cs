@@ -5,6 +5,7 @@ namespace KChartCore
     public class KChartEngine : OneMinBarBase
     {
         protected Dictionary<int, Dictionary<DateTime, bool>> Separator;
+        private readonly Dictionary<int, DateTime> _lastPeriodCompletedCloseTime = new();
 
         // 公開基類的 protected 事件
         public new event Action<int, FunctionKBar>? OnKbarCompleted;
@@ -294,9 +295,14 @@ namespace KChartCore
         public new void SealCurrentBar()
         {
             // 先呼叫base讓它處理一分鐘K棒並觸發正確的事件
-            base.SealCurrentBar();
+            var sealedOneMinute = base.SealCurrentBar();
 
-            // 然後處理多週期聚合
+            // 只有真的封出新的1分鐘K棒，才處理多週期聚合
+            if (!sealedOneMinute)
+            {
+                return;
+            }
+
             ProcessMultiPeriodAggregation();
         }
 
@@ -322,6 +328,13 @@ namespace KChartCore
                     try
                     {
                         var currentPeriodBar = GetCurrentPeriodBar(period);
+                        if (_lastPeriodCompletedCloseTime.TryGetValue(period, out var lastClose) &&
+                            lastClose == currentPeriodBar.CloseTime)
+                        {
+                            continue;
+                        }
+
+                        _lastPeriodCompletedCloseTime[period] = currentPeriodBar.CloseTime;
                         OnKbarCompleted?.Invoke(period, currentPeriodBar);
                     }
                     catch (Exception ex)

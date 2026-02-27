@@ -34,37 +34,30 @@ namespace ZenPlatform
                 return;
             }
 
-            var oldPassword = _permission.BrokerPassword ?? string.Empty;
-            var newPassword = BrokerPasswordBox.Text.Trim();
-
-            if (string.IsNullOrWhiteSpace(oldPassword))
-            {
-                MessageBoxWindow.Show(this, "無舊期貨密碼可供驗證。", "提示");
-                return;
-            }
-
-            if (string.IsNullOrWhiteSpace(newPassword))
+            var brokerPassword = BrokerPasswordBox.Text.Trim();
+            if (string.IsNullOrWhiteSpace(brokerPassword))
             {
                 MessageBoxWindow.Show(this, "請輸入期貨密碼。", "提示");
                 BrokerPasswordBox.Focus();
                 return;
             }
 
+            _permission.BrokerPassword = brokerPassword;
+            var user = _userInfoCtrl.LastUserData?.User;
             var ok = await _userInfoCtrl.UpdateUserData(
                 _permission,
                 _userId,
-                oldBrokerPassword: oldPassword,
-                newBrokerPassword: newPassword);
+                user?.Name,
+                user?.LineId,
+                user?.Phone,
+                user?.Email);
 
             if (!ok)
             {
                 var reason = _userInfoCtrl.LastUpdateError;
-                var message = reason switch
-                {
-                    "invalid_broker_password" => "舊期貨密碼錯誤。",
-                    "missing_broker_password" => "密碼欄位不足。",
-                    _ => "更新失敗，請稍後再試。"
-                };
+                var message = string.IsNullOrWhiteSpace(reason)
+                    ? "更新失敗，請稍後再試。"
+                    : $"更新失敗：{reason}";
                 MessageBoxWindow.Show(this, message, "提示");
                 return;
             }

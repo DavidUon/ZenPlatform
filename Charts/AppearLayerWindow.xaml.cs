@@ -29,11 +29,14 @@ namespace Charts
             CbVol.IsChecked = _chart.HasIndicatorPanel(IndicatorPanelType.Vol);
             CbKd.IsChecked = _chart.HasIndicatorPanel(IndicatorPanelType.Kd);
             CbMacd.IsChecked = _chart.HasIndicatorPanel(IndicatorPanelType.Macd);
+            CbAtr.IsChecked = _chart.HasIndicatorPanel(IndicatorPanelType.Atr);
+            CbHa.IsChecked = _chart.HasIndicatorPanel(IndicatorPanelType.Ha);
 
             var cfgs = _chart.GetMainPricePane().GetOverlayConfigs();
             CbMa.IsChecked = cfgs.Any(c => c.Type == "MA");
             CbBbi.IsChecked = cfgs.Any(c => c.Type == "BBI");
             CbBoll.IsChecked = cfgs.Any(c => c.Type == "BOLL");
+            CbSar.IsChecked = cfgs.Any(c => c.Type == "SAR");
         }
 
         private void HookEvents()
@@ -49,12 +52,18 @@ namespace Charts
             CbKd.Unchecked += (_, __) => ToggleKd(false);
             CbMacd.Checked += (_, __) => ToggleMacd(true);
             CbMacd.Unchecked += (_, __) => ToggleMacd(false);
+            CbAtr.Checked += (_, __) => ToggleAtr(true);
+            CbAtr.Unchecked += (_, __) => ToggleAtr(false);
+            CbHa.Checked += (_, __) => ToggleHa(true);
+            CbHa.Unchecked += (_, __) => ToggleHa(false);
             CbMa.Checked += (_, __) => ToggleMa(true);
             CbMa.Unchecked += (_, __) => ToggleMa(false);
             CbBbi.Checked += (_, __) => ToggleBbi(true);
             CbBbi.Unchecked += (_, __) => ToggleBbi(false);
             CbBoll.Checked += (_, __) => ToggleBoll(true);
             CbBoll.Unchecked += (_, __) => ToggleBoll(false);
+            CbSar.Checked += (_, __) => ToggleSar(true);
+            CbSar.Unchecked += (_, __) => ToggleSar(false);
         }
 
         private void ToggleCrosshair(bool on)
@@ -109,6 +118,16 @@ namespace Charts
             if (on) _chart.AddIndicatorPanel(IndicatorPanelType.Macd);
             else _chart.RemoveIndicatorPanel(IndicatorPanelType.Macd);
         }
+        private void ToggleAtr(bool on)
+        {
+            if (on) _chart.AddIndicatorPanel(IndicatorPanelType.Atr);
+            else _chart.RemoveIndicatorPanel(IndicatorPanelType.Atr);
+        }
+        private void ToggleHa(bool on)
+        {
+            if (on) _chart.AddIndicatorPanel(IndicatorPanelType.Ha);
+            else _chart.RemoveIndicatorPanel(IndicatorPanelType.Ha);
+        }
         private void ToggleMa(bool on)
         {
             var pane = _chart.GetMainPricePane();
@@ -149,6 +168,19 @@ namespace Charts
             else
             {
                 if (has) _chart.RemoveBollingerOverlay();
+            }
+        }
+        private void ToggleSar(bool on)
+        {
+            var pane = _chart.GetMainPricePane();
+            var has = pane.GetOverlayConfigs().Any(c => c.Type == "SAR");
+            if (on)
+            {
+                if (!has) _chart.AddSarOverlay();
+            }
+            else
+            {
+                if (has) _chart.RemoveSarOverlay();
             }
         }
     }

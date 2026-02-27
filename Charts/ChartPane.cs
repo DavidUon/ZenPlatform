@@ -120,7 +120,7 @@ namespace Charts
         private bool _isDraggingX = false;
         private Point _lastMousePos;
         private const double _zoomStep = 0.12;
-        private const double _minSpacing = 5.0;
+        private const double _minSpacing = 1.0;
         private const double _maxSpacing = 40.0;
         private const double _barWidthPadding = 2.0;
 
@@ -136,7 +136,7 @@ namespace Charts
 
             this.ChartTheme = new ChartStyle();
             _barSpacing = this.ChartTheme.DefaultBarSpacing;
-            _barWidth = this.ChartTheme.DefaultBarWidth;
+            _barWidth = ComputeBarWidth(_barSpacing);
 
             this.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(ChartTheme.LeftPanelWidth) });
             this.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
@@ -271,6 +271,26 @@ namespace Charts
                         UpdateOverlaySectionsLatest();
                     }
                 }
+                else if (id == "SAR")
+                {
+                    decimal defStep = 0.02m;
+                    decimal defMax = 0.2m;
+                    Color defColor = Color.FromRgb(0x00, 0xC8, 0xFF);
+                    var curr = GetOverlayConfigs().FirstOrDefault(o => o.Type == "SAR");
+                    if (curr != null)
+                    {
+                        if (curr.SarStep > 0) defStep = (decimal)curr.SarStep;
+                        if (curr.SarMax > 0) defMax = (decimal)curr.SarMax;
+                        if (!string.IsNullOrEmpty(curr.ColorHex)) defColor = (Color)ColorConverter.ConvertFromString(curr.ColorHex!);
+                    }
+                    var dlg = new SarSettingsDialog(defStep, defMax, defColor) { Owner = owner };
+                    if (dlg.ShowDialog() == true)
+                    {
+                        RemoveOverlaysByTag("SAR");
+                        AddOverlay(new SarOverlay(dlg.Step, dlg.Max, dlg.DotColor));
+                        UpdateOverlaySectionsLatest();
+                    }
+                }
             }
             catch { }
         }
@@ -398,9 +418,9 @@ namespace Charts
                 _hisBars.Add(new GraphKBar(bar));
             }
 
-            int padding = (_hisBars.Count > 0 ? _hisBars.Count / 2 : 0) + 25;
-            int virtualCount = _hisBars.Count + padding;
             int tempVisibleCount = (_chartWidth > 0 && _barSpacing > 0) ? Math.Max(1, (int)Math.Floor(_coordinateCalculator.GetChartWidthMinusBarWidth() / _barSpacing) + 1) : 50;
+            int padding = Math.Max(1, (int)Math.Round(tempVisibleCount * 0.20)); // 右側預留約 20%
+            int virtualCount = _hisBars.Count + padding;
             int endIndex = Math.Max(0, virtualCount - tempVisibleCount);
             _visibleStartIndex = endIndex;
 
@@ -462,7 +482,7 @@ namespace Charts
                     // 使用者正在關注最新區域，進行自動卷頁
                     int rightMost = _visibleStartIndex + _visibleBarCount - 1;
                     int rightSpace = rightMost - lastIdx;
-                    int desiredRight = Math.Max(1, (int)Math.Round(_visibleBarCount * 0.30));
+                    int desiredRight = Math.Max(1, (int)Math.Round(_visibleBarCount * 0.20));
                     if (rightSpace < desiredRight)
                     {
                         int newStart = lastIdx + desiredRight - (_visibleBarCount - 1);
@@ -1042,8 +1062,8 @@ namespace Charts
                 else
                 {
                     decimal range = maxHigh.Value - minLow.Value;
-                    _displayMaxPrice = maxHigh.Value + range * 0.10m;
-                    _displayMinPrice = minLow.Value - range * 0.05m;
+                    _displayMaxPrice = maxHigh.Value + range * 0.15m;
+                    _displayMinPrice = minLow.Value - range * 0.10m;
                 }
             }
             else
@@ -1053,8 +1073,8 @@ namespace Charts
                 {
                     decimal hi = _floatingKBar.High, lo = _floatingKBar.Low;
                     decimal range = Math.Max(1m, hi - lo);
-                    _displayMaxPrice = hi + range * 0.10m;
-                    _displayMinPrice = lo - range * 0.05m;
+                    _displayMaxPrice = hi + range * 0.15m;
+                    _displayMinPrice = lo - range * 0.10m;
                 }
                 else if (_displayMaxPrice == 0 && _displayMinPrice == 0)
                 {
@@ -1152,6 +1172,7 @@ namespace Charts
                 _priceInfoPanel.RemoveSection("MA");
                 _priceInfoPanel.RemoveSection("BOLL");
                 _priceInfoPanel.RemoveSection("BBI");
+                _priceInfoPanel.RemoveSection("SAR");
                 return;
             }
 
@@ -1194,6 +1215,17 @@ namespace Charts
                     _priceInfoPanel.SetSection("BBI", "BBI", bbiPlaceholders);
                 }
                 else _priceInfoPanel.RemoveSection("BBI");
+
+                bool hasSar = _overlays.Any(o => o is SarOverlay);
+                if (hasSar)
+                {
+                    var sarPlaceholders = new List<PriceInfoPanel.InfoLine>
+                    {
+                        new PriceInfoPanel.InfoLine { Label = "SAR:", ValueText = "---", ValueBrush = new SolidColorBrush(Color.FromRgb(0x00,0xC8,0xFF)), ArrowDir = null }
+                    };
+                    _priceInfoPanel.SetSection("SAR", "SAR", sarPlaceholders);
+                }
+                else _priceInfoPanel.RemoveSection("SAR");
                 return;
             }
             int dataIndex = _hisBars.Count - 1;
@@ -1212,6 +1244,11 @@ namespace Charts
             foreach (var ov in _overlays.Where(o => o.TagName == "BBI"))
                 bbiLines.AddRange(ov.GetInfoLines(dataIndex, prevIndex, _priceDecimalPlaces));
             if (bbiLines.Count > 0) _priceInfoPanel.SetSection("BBI", "BBI", bbiLines); else _priceInfoPanel.RemoveSection("BBI");
+
+            var sarLines = new List<PriceInfoPanel.InfoLine>();
+            foreach (var ov in _overlays.Where(o => o.TagName == "SAR"))
+                sarLines.AddRange(ov.GetInfoLines(dataIndex, prevIndex, _priceDecimalPlaces));
+            if (sarLines.Count > 0) _priceInfoPanel.SetSection("SAR", "SAR", sarLines); else _priceInfoPanel.RemoveSection("SAR");
         }
 
         // Export/Import overlays for persistence
@@ -1243,6 +1280,10 @@ namespace Charts
                 {
                     list.Add(new OverlayConfig { Type = "BBI", ColorHex = ColorToHex(bbi.LineColor), BbiPeriodsCsv = string.Join(",", bbi.GetParameters()) });
                 }
+                else if (ov is SarOverlay sar)
+                {
+                    list.Add(new OverlayConfig { Type = "SAR", ColorHex = ColorToHex(sar.DotColor), SarStep = (double)sar.Step, SarMax = (double)sar.Max });
+                }
             }
             return list;
         }
@@ -1272,6 +1313,13 @@ namespace Charts
                     if (string.IsNullOrEmpty(c.ColorHex)) col = Color.FromRgb(0xE9, 0x1E, 0x1F);
                     AddOverlay(new BbiOverlay(periods, col));
                 }
+                else if (c.Type == "SAR")
+                {
+                    var col = string.IsNullOrEmpty(c.ColorHex) ? Color.FromRgb(0x00, 0xC8, 0xFF) : HexToColor(c.ColorHex!);
+                    var step = c.SarStep > 0 ? (decimal)c.SarStep : 0.02m;
+                    var max = c.SarMax > 0 ? (decimal)c.SarMax : 0.2m;
+                    AddOverlay(new SarOverlay(step, max, col));
+                }
             }
         }
 
@@ -1296,7 +1344,7 @@ namespace Charts
         {
             _visibleStartIndex = Math.Max(0, visibleStartIndex);
             _barSpacing = Math.Max(_minSpacing, Math.Min(_maxSpacing, barSpacing));
-            _barWidth = Math.Max(1.0, _barSpacing - _barWidthPadding);
+            _barWidth = ComputeBarWidth(_barSpacing);
             UpdateCoordinateCache();
             UpdateVisibleRange();
             RedrawChart();
@@ -1327,12 +1375,28 @@ namespace Charts
                 int shiftBars = -(int)Math.Round(deltaX / _barSpacing);
                 if (shiftBars != 0)
                 {
+                    var oldStart = _visibleStartIndex;
                     int newStart = _visibleStartIndex + shiftBars;
                     int padding = _visibleBarCount / 2;
                     int virtualCount = _hisBars.Count + padding;
                     int maxStartIndex = Math.Max(0, virtualCount - _visibleBarCount);
                     newStart = Math.Max(0, Math.Min(maxStartIndex, newStart));
-                    if (newStart != _visibleStartIndex) { _visibleStartIndex = newStart; RedrawChart(); RaiseXViewChangedIfMain(); }
+                    if (newStart != _visibleStartIndex)
+                    {
+                        _visibleStartIndex = newStart;
+                        RedrawChart();
+                        RaiseXViewChangedIfMain();
+                    }
+                    else
+                    {
+                        // 邊界拖曳時也要通知，讓外部可在右/左端觸發補載。
+                        var pushingLeftBoundary = oldStart == 0 && shiftBars < 0;
+                        var pushingRightBoundary = oldStart == maxStartIndex && shiftBars > 0;
+                        if (pushingLeftBoundary || pushingRightBoundary)
+                        {
+                            RaiseXViewChangedIfMain();
+                        }
+                    }
                     _lastMousePos = pos;
                 }
             }
@@ -1363,7 +1427,7 @@ namespace Charts
             if (Math.Abs(newSpacing - _barSpacing) < 0.01) return;
 
             _barSpacing = newSpacing;
-            _barWidth = Math.Max(1.0, _barSpacing - _barWidthPadding);
+            _barWidth = ComputeBarWidth(_barSpacing);
 
             UpdateCoordinateCache();
             UpdateVisibleRange();
@@ -1384,6 +1448,17 @@ namespace Charts
             
             RedrawChart();
             RaiseXViewChangedIfMain();
+        }
+
+        private double ComputeBarWidth(double spacing)
+        {
+            // Keep tiny-zoom capability (min spacing = 1) while preserving visual gap on normal scales.
+            if (spacing <= 2.0)
+            {
+                return 1.0;
+            }
+
+            return Math.Max(1.0, spacing - _barWidthPadding);
         }
 
         private void HideCrosshairAndTags()
@@ -1502,6 +1577,18 @@ namespace Charts
                 bbLines.AddRange(ov.GetInfoLines(dataIndex, prevIndex, _priceDecimalPlaces));
                     if (bbLines.Count > 0) _priceInfoPanel.SetSection("BOLL", "布林通道", bbLines);
                     else _priceInfoPanel.RemoveSection("BOLL");
+                    // BBI section
+            var bbiLines = new List<PriceInfoPanel.InfoLine>();
+            foreach (var ov in _overlays.Where(o => o.TagName == "BBI"))
+                bbiLines.AddRange(ov.GetInfoLines(dataIndex, prevIndex, _priceDecimalPlaces));
+                    if (bbiLines.Count > 0) _priceInfoPanel.SetSection("BBI", "BBI", bbiLines);
+                    else _priceInfoPanel.RemoveSection("BBI");
+                    // SAR section
+            var sarLines = new List<PriceInfoPanel.InfoLine>();
+            foreach (var ov in _overlays.Where(o => o.TagName == "SAR"))
+                sarLines.AddRange(ov.GetInfoLines(dataIndex, prevIndex, _priceDecimalPlaces));
+                    if (sarLines.Count > 0) _priceInfoPanel.SetSection("SAR", "SAR", sarLines);
+                    else _priceInfoPanel.RemoveSection("SAR");
                 }
             }
             else
@@ -1564,11 +1651,22 @@ namespace Charts
                             foreach (var ov in _overlays.Where(o => o.TagName == "布林通道"))
                                 bbLines.AddRange(ov.GetInfoLines(dataIndex, prevIndex, _priceDecimalPlaces));
                             if (bbLines.Count > 0) _priceInfoPanel.SetSection("BOLL", "布林通道", bbLines); else _priceInfoPanel.RemoveSection("BOLL");
+                            var bbiLines = new List<PriceInfoPanel.InfoLine>();
+                            foreach (var ov in _overlays.Where(o => o.TagName == "BBI"))
+                                bbiLines.AddRange(ov.GetInfoLines(dataIndex, prevIndex, _priceDecimalPlaces));
+                            if (bbiLines.Count > 0) _priceInfoPanel.SetSection("BBI", "BBI", bbiLines); else _priceInfoPanel.RemoveSection("BBI");
+
+                            var sarLines = new List<PriceInfoPanel.InfoLine>();
+                            foreach (var ov in _overlays.Where(o => o.TagName == "SAR"))
+                                sarLines.AddRange(ov.GetInfoLines(dataIndex, prevIndex, _priceDecimalPlaces));
+                            if (sarLines.Count > 0) _priceInfoPanel.SetSection("SAR", "SAR", sarLines); else _priceInfoPanel.RemoveSection("SAR");
                         }
                         else
                         {
                             _priceInfoPanel.RemoveSection("MA");
                             _priceInfoPanel.RemoveSection("BOLL");
+                            _priceInfoPanel.RemoveSection("BBI");
+                            _priceInfoPanel.RemoveSection("SAR");
                         }
                     }
                 }
@@ -1580,7 +1678,7 @@ namespace Charts
                     if (_crosshairBroadcastEnabled) CrosshairMoved?.Invoke(this, mouseResult.VisibleIndex, false);
                     OnCrosshairIndexChanged(mouseResult.VisibleIndex, false);
                     foreach (var ov in _overlays) ov.OnCrosshairIndexChanged(mouseResult.VisibleIndex, false);
-                    if (IsMainPane) { _priceInfoPanel.RemoveSection("MA"); _priceInfoPanel.RemoveSection("BOLL"); }
+                    if (IsMainPane) { _priceInfoPanel.RemoveSection("MA"); _priceInfoPanel.RemoveSection("BOLL"); _priceInfoPanel.RemoveSection("BBI"); _priceInfoPanel.RemoveSection("SAR"); }
                 }
             }
 

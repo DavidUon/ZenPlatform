@@ -16,7 +16,7 @@ namespace Charts
 
     public class OverlayConfig
     {
-        public string Type { get; set; } = string.Empty; // "MA" / "BOLL" / "BBI"
+        public string Type { get; set; } = string.Empty; // "MA" / "BOLL" / "BBI" / "SAR"
         // MA / BBI
         public int Period { get; set; }
         public string MaType { get; set; } = "MA"; // MA or EMA
@@ -29,11 +29,14 @@ namespace Charts
         public string? MidColorHex { get; set; }
         public string? EdgeColorHex { get; set; }
         public double Opacity { get; set; }
+        // SAR
+        public double SarStep { get; set; }
+        public double SarMax { get; set; }
     }
 
     public class IndicatorConfig
     {
-        public string Type { get; set; } = string.Empty; // VOL, KD, MACD
+        public string Type { get; set; } = string.Empty; // VOL, KD, MACD, ATR, HA
         // KD
         public int Period { get; set; }
         public int SmoothK { get; set; }
@@ -46,6 +49,9 @@ namespace Charts
         public int Day { get; set; }
         public string? DifColorHex { get; set; }
         public string? DeaColorHex { get; set; }
+        // ATR
+        public int AtrPeriod { get; set; }
+        public string? AtrColorHex { get; set; }
     }
 }
 

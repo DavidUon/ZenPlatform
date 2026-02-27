@@ -5,7 +5,8 @@
         WindowStartupLocation="CenterOwner"
         ResizeMode="NoResize"
         Background="{StaticResource BrushWindowBackground}"
-        Foreground="{StaticResource BrushText}">
+        Foreground="{StaticResource BrushText}"
+        ShowInTaskbar="False">
     <Grid Margin="16">
         <TextBlock x:Name="MessageText" TextWrapping="Wrap" VerticalAlignment="Center" />
     </Grid>

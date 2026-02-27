@@ -6,6 +6,7 @@ using System.ComponentModel;
 using System.Threading.Tasks;
 using System.Windows.Input;
 using System.Windows.Threading;
+using System.Windows.Media;
 using Brokers;
 using ZenPlatform.Core;
 using ZenPlatform.LogText;
@@ -134,6 +135,58 @@ namespace ZenPlatform.MVVM.RulePage
 
         public ICommand QueryMarginCommand { get; }
         public ICommand CheckCertCommand { get; }
+        public string TrendModeText => _manager.RuleSet.TrendMode switch
+        {
+            TrendMode.Auto => "系統自動判定",
+            TrendMode.None => "無方向判定",
+            TrendMode.MovingAverage => $"均線判定 (MA{Math.Max(1, _manager.RuleSet.TrendMaPeriod)})",
+            TrendMode.Force => "強制判定",
+            _ => "未設定"
+        };
+
+        public StopLossMode CurrentStopLossMode => _manager.RuleSet.StopLossMode;
+
+        public string TrendStatusText
+        {
+            get
+            {
+                return _manager.RuleSet.TrendMode switch
+                {
+                    TrendMode.None => "無視多空方向",
+                    TrendMode.Force => _manager.RuleSet.TrendForceSide switch
+                    {
+                        TrendForceSide.多 => "自訂多方",
+                        TrendForceSide.空 => "自訂空方",
+                        _ => "---"
+                    },
+                    TrendMode.Auto or TrendMode.MovingAverage => _manager.CurrnetSide switch
+                    {
+                        EntryTrendSide.多 => "目前偏多",
+                        EntryTrendSide.空 => "目前偏空",
+                        _ => "---"
+                    },
+                    _ => "---"
+                };
+            }
+        }
+
+        public Brush TrendStatusBrush => _manager.RuleSet.TrendMode switch
+        {
+            TrendMode.None => new SolidColorBrush(Color.FromRgb(210, 210, 210)),
+            TrendMode.Force => _manager.RuleSet.TrendForceSide switch
+            {
+                TrendForceSide.多 => new SolidColorBrush(Color.FromRgb(255, 120, 120)),
+                TrendForceSide.空 => new SolidColorBrush(Color.FromRgb(120, 255, 140)),
+                _ => new SolidColorBrush(Color.FromRgb(210, 210, 210))
+            },
+            TrendMode.Auto or TrendMode.MovingAverage => _manager.CurrnetSide switch
+            {
+                EntryTrendSide.多 => new SolidColorBrush(Color.FromRgb(255, 120, 120)),
+                EntryTrendSide.空 => new SolidColorBrush(Color.FromRgb(120, 255, 140)),
+                _ => new SolidColorBrush(Color.FromRgb(210, 210, 210))
+            },
+            _ => new SolidColorBrush(Color.FromRgb(210, 210, 210))
+        };
 
         public event PropertyChangedEventHandler? PropertyChanged;
 
@@ -150,6 +203,7 @@ namespace ZenPlatform.MVVM.RulePage
                 OnPropertyChanged(nameof(IsStrategyRunning));
                 OnPropertyChanged(nameof(StrategyButtonText));
                 OnPropertyChanged(nameof(IsBacktestButtonEnabled));
+                RefreshTrendStatus();
             }
 
             if (string.Equals(e.PropertyName, nameof(SessionManager.SessionManager.IsRealTrade), StringComparison.Ordinal))
@@ -163,6 +217,24 @@ namespace ZenPlatform.MVVM.RulePage
                 OnPropertyChanged(nameof(BacktestButtonText));
                 OnPropertyChanged(nameof(IsBacktestButtonEnabled));
             }
+
+            if (string.Equals(e.PropertyName, nameof(SessionManager.SessionManager.CurrnetSide), StringComparison.Ordinal))
+            {
+                RefreshTrendStatus();
+            }
+        }
+
+        public void RefreshTrendStatus()
+        {
+            OnPropertyChanged(nameof(TrendModeText));
+            OnPropertyChanged(nameof(TrendStatusText));
+            OnPropertyChanged(nameof(TrendStatusBrush));
+        }
+
+        public void RefreshRuleSetStatus()
+        {
+            OnPropertyChanged(nameof(CurrentStopLossMode));
+            RefreshTrendStatus();
         }
 
         private void OnSessionsChanged(object? sender, NotifyCollectionChangedEventArgs e)

@@ -11,6 +11,13 @@ namespace Charts
     // 簡易 MACD 副圖面板（目前僅作為佈局與同步範本，未實作實際繪圖）
     public class MacdPane : ChartPane
     {
+        private const string KeyDif = "MACD_DIF";
+        private const string KeyDea = "MACD_DEA";
+        private const string KeyHist = "MACD_HIST";
+        private const string KeyMetaFast = "MACD_META_FAST";
+        private const string KeyMetaSlow = "MACD_META_SLOW";
+        private const string KeyMetaSignal = "MACD_META_SIGNAL";
+
         protected override bool EnableBatchDrawing => false; // 使用 DrawSingleBar，但內部做批次合併
         private struct MacdPoint
         {
@@ -45,7 +52,7 @@ namespace Charts
         public MacdPane() : base()
         {
             _priceInfoPanel.Visibility = Visibility.Visible;
-            _priceInfoPanel.SetTitle("MACD指標");
+            _priceInfoPanel.SetTitle("MACD");
             _priceInfoPanel.SetTitleClickable(true);
             _priceInfoPanel.TitleClicked += () =>
             {
@@ -87,7 +94,50 @@ namespace Charts
             {
                 if (!_indexMap.ContainsKey(_hisBars[0])) needRecalc = true;
             }
-            if (needRecalc) RecalculateMacd();
+            if (needRecalc)
+            {
+                if (!TryLoadFromIndicators())
+                {
+                    RecalculateMacd();
+                }
+            }
+        }
+
+        private bool TryLoadFromIndicators()
+        {
+            _macd.Clear();
+            _indexMap.Clear();
+            if (_hisBars.Count == 0) return false;
+
+            for (int i = 0; i < _hisBars.Count; i++)
+            {
+                var bar = _hisBars[i];
+                if (bar.Indicators == null ||
+                    !bar.Indicators.TryGetValue(KeyMetaFast, out var fast) ||
+                    !bar.Indicators.TryGetValue(KeyMetaSlow, out var slow) ||
+                    !bar.Indicators.TryGetValue(KeyMetaSignal, out var signal) ||
+                    (int)fast != _fast ||
+                    (int)slow != _slow ||
+                    (int)signal != _signal ||
+                    !bar.Indicators.TryGetValue(KeyDif, out var dif) ||
+                    !bar.Indicators.TryGetValue(KeyDea, out var dea) ||
+                    !bar.Indicators.TryGetValue(KeyHist, out var hist))
+                {
+                    _macd.Clear();
+                    _indexMap.Clear();
+                    return false;
+                }
+
+                _macd.Add(new MacdPoint
+                {
+                    Time = bar.Time,
+                    Dif = dif,
+                    Dea = dea,
+                    Hist = hist
+                });
+                _indexMap[bar] = i;
+            }
+            return true;
         }
 
         private void RecalculateMacd()
@@ -123,9 +173,12 @@ namespace Charts
                 };
                 _macd.Add(macd);
                 _indexMap[_hisBars[i]] = i;
-                _hisBars[i].Indicators["MACD_DIF"] = dif;
-                _hisBars[i].Indicators["MACD_DEA"] = dea;
-                _hisBars[i].Indicators["MACD_HIST"] = dif - dea;
+                _hisBars[i].Indicators[KeyDif] = dif;
+                _hisBars[i].Indicators[KeyDea] = dea;
+                _hisBars[i].Indicators[KeyHist] = dif - dea;
+                _hisBars[i].Indicators[KeyMetaFast] = _fast;
+                _hisBars[i].Indicators[KeyMetaSlow] = _slow;
+                _hisBars[i].Indicators[KeyMetaSignal] = _signal;
             }
         }
 

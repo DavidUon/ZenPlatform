@@ -274,32 +274,44 @@ namespace TaifexHisDbManager
                 }
             };
 
+            // Keep last known values in O(1) instead of scanning result repeatedly.
+            var lastKnownPrice = rangeTicks[0].Price;
+            var lastKnownContractMonth = rangeTicks[0].ContractMonth;
+            var tickIndex = 0;
+            var tickCount = rangeTicks.Count;
             var current = startTime;
             while (current <= endTime)
             {
                 var minuteStart = new DateTime(current.Year, current.Month, current.Day, current.Hour, current.Minute, 0);
                 var minuteEnd = minuteStart.AddMinutes(1);
-
-                var minuteTicks = rangeTicks.Where(t => t.DateTime >= minuteStart && t.DateTime < minuteEnd).ToList();
-
-                if (minuteTicks.Any())
+                var hadTradeInMinute = false;
+                while (tickIndex < tickCount)
                 {
-                    result.AddRange(minuteTicks);
-                }
-                else
-                {
-                    bool hasMarketEvent = result.Any(t => t.DateTime == minuteStart && t.Event != DbEvent.Trade);
-                    if (!hasMarketEvent)
+                    var tick = rangeTicks[tickIndex];
+                    if (tick.DateTime >= minuteEnd)
                     {
-                        result.Add(new ConvertedTickData
-                        {
-                            DateTime = minuteStart,
-                            Price = GetLastKnownPrice(result),
-                            Volume = 0,
-                            Event = DbEvent.TimeBoundary,
-                            ContractMonth = GetLastKnownContractMonth(result)
-                        });
+                        break;
                     }
+
+                    // rangeTicks is already filtered by [startTime, endTime], so this tick belongs to current minute.
+                    result.Add(tick);
+                    hadTradeInMinute = true;
+                    lastKnownPrice = tick.Price;
+                    lastKnownContractMonth = tick.ContractMonth;
+                    tickIndex++;
+                }
+
+                // Start minute already has a MarketOpen marker; other empty minutes get a boundary marker.
+                if (!hadTradeInMinute && minuteStart != startTime)
+                {
+                    result.Add(new ConvertedTickData
+                    {
+                        DateTime = minuteStart,
+                        Price = lastKnownPrice,
+                        Volume = 0,
+                        Event = DbEvent.TimeBoundary,
+                        ContractMonth = lastKnownContractMonth
+                    });
                 }
 
                 current = current.AddMinutes(1);
@@ -310,10 +322,10 @@ namespace TaifexHisDbManager
                 result.Add(new ConvertedTickData
                 {
                     DateTime = endTime,
-                    Price = GetLastKnownPrice(result),
+                    Price = lastKnownPrice,
                     Volume = 0,
                     Event = DbEvent.MarketClose,
-                    ContractMonth = GetLastKnownContractMonth(result)
+                    ContractMonth = lastKnownContractMonth
                 });
             }
 
@@ -506,10 +518,9 @@ namespace TaifexHisDbManager
 
     internal sealed class YearDatabase : IDisposable
     {
+        private const int BulkInsertChunkSize = 500;
         private readonly SqliteConnection _connection;
         private readonly SqliteTransaction _transaction;
-        private readonly SqliteCommand _insertTick;
-        private readonly SqliteCommand _insertBar;
         private readonly SqliteCommand _deleteTicks;
         private readonly SqliteCommand _deleteBars;
 
@@ -520,28 +531,6 @@ namespace TaifexHisDbManager
             EnsureSchema();
 
             _transaction = _connection.BeginTransaction();
-
-            _insertTick = _connection.CreateCommand();
-            _insertTick.CommandText = "INSERT INTO ticks (ts, product, price, volume, event, contract_month) VALUES (@ts, @product, @price, @volume, @event, @contract)";
-            _insertTick.Transaction = _transaction;
-            _insertTick.Parameters.Add("@ts", SqliteType.Integer);
-            _insertTick.Parameters.Add("@product", SqliteType.Integer);
-            _insertTick.Parameters.Add("@price", SqliteType.Real);
-            _insertTick.Parameters.Add("@volume", SqliteType.Integer);
-            _insertTick.Parameters.Add("@event", SqliteType.Integer);
-            _insertTick.Parameters.Add("@contract", SqliteType.Integer);
-
-            _insertBar = _connection.CreateCommand();
-            _insertBar.CommandText = "INSERT OR REPLACE INTO bars_1m (ts, product, open, high, low, close, volume, event) VALUES (@ts, @product, @open, @high, @low, @close, @volume, @event)";
-            _insertBar.Transaction = _transaction;
-            _insertBar.Parameters.Add("@ts", SqliteType.Integer);
-            _insertBar.Parameters.Add("@product", SqliteType.Integer);
-            _insertBar.Parameters.Add("@open", SqliteType.Real);
-            _insertBar.Parameters.Add("@high", SqliteType.Real);
-            _insertBar.Parameters.Add("@low", SqliteType.Real);
-            _insertBar.Parameters.Add("@close", SqliteType.Real);
-            _insertBar.Parameters.Add("@volume", SqliteType.Integer);
-            _insertBar.Parameters.Add("@event", SqliteType.Integer);
 
             _deleteTicks = _connection.CreateCommand();
             _deleteTicks.CommandText = "DELETE FROM ticks WHERE product = @product AND ts BETWEEN @start AND @end";
@@ -565,8 +554,8 @@ namespace TaifexHisDbManager
 
             if (ticks.Count > 0)
             {
-                long startTs = ToUnixSeconds(ticks.Min(t => t.DateTime));
-                long endTs = ToUnixSeconds(ticks.Max(t => t.DateTime));
+                long startTs = ToUnixSeconds(ticks[0].DateTime);
+                long endTs = ToUnixSeconds(ticks[ticks.Count - 1].DateTime);
 
                 _deleteTicks.Parameters["@product"].Value = product;
                 _deleteTicks.Parameters["@start"].Value = startTs;
@@ -576,8 +565,8 @@ namespace TaifexHisDbManager
 
             if (bars.Count > 0)
             {
-                long barStartTs = ToUnixSeconds(bars.Min(b => b.EndTime));
-                long barEndTs = ToUnixSeconds(bars.Max(b => b.EndTime));
+                long barStartTs = ToUnixSeconds(bars[0].EndTime);
+                long barEndTs = ToUnixSeconds(bars[bars.Count - 1].EndTime);
 
                 _deleteBars.Parameters["@product"].Value = product;
                 _deleteBars.Parameters["@start"].Value = barStartTs;
@@ -585,28 +574,81 @@ namespace TaifexHisDbManager
                 _deleteBars.ExecuteNonQuery();
             }
 
-            foreach (var tick in ticks)
+            InsertTicksBulk(product, ticks);
+            InsertBarsBulk(product, bars);
+        }
+
+        private void InsertTicksBulk(int product, List<ConvertedTickData> ticks)
+        {
+            if (ticks.Count == 0)
             {
-                _insertTick.Parameters["@ts"].Value = ToUnixSeconds(tick.DateTime);
-                _insertTick.Parameters["@product"].Value = product;
-                _insertTick.Parameters["@price"].Value = tick.Price;
-                _insertTick.Parameters["@volume"].Value = tick.Volume;
-                _insertTick.Parameters["@event"].Value = tick.Event;
-                _insertTick.Parameters["@contract"].Value = tick.ContractMonth;
-                _insertTick.ExecuteNonQuery();
+                return;
             }
 
-            foreach (var bar in bars)
+            for (int offset = 0; offset < ticks.Count; offset += BulkInsertChunkSize)
             {
-                _insertBar.Parameters["@ts"].Value = ToUnixSeconds(bar.EndTime);
-                _insertBar.Parameters["@product"].Value = product;
-                _insertBar.Parameters["@open"].Value = bar.Open;
-                _insertBar.Parameters["@high"].Value = bar.High;
-                _insertBar.Parameters["@low"].Value = bar.Low;
-                _insertBar.Parameters["@close"].Value = bar.Close;
-                _insertBar.Parameters["@volume"].Value = bar.Volume;
-                _insertBar.Parameters["@event"].Value = bar.Event;
-                _insertBar.ExecuteNonQuery();
+                int end = Math.Min(offset + BulkInsertChunkSize, ticks.Count);
+                var sql = new StringBuilder("INSERT INTO ticks (ts, product, price, volume, event, contract_month) VALUES ");
+                for (int i = offset; i < end; i++)
+                {
+                    var tick = ticks[i];
+                    if (i > offset)
+                    {
+                        sql.Append(',');
+                    }
+
+                    sql.Append('(')
+                       .Append(ToUnixSeconds(tick.DateTime)).Append(',')
+                       .Append(product).Append(',')
+                       .Append(((double)tick.Price).ToString(CultureInfo.InvariantCulture)).Append(',')
+                       .Append(tick.Volume).Append(',')
+                       .Append(tick.Event).Append(',')
+                       .Append(tick.ContractMonth)
+                       .Append(')');
+                }
+
+                using var cmd = _connection.CreateCommand();
+                cmd.Transaction = _transaction;
+                cmd.CommandText = sql.ToString();
+                cmd.ExecuteNonQuery();
+            }
+        }
+
+        private void InsertBarsBulk(int product, List<Bar1m> bars)
+        {
+            if (bars.Count == 0)
+            {
+                return;
+            }
+
+            for (int offset = 0; offset < bars.Count; offset += BulkInsertChunkSize)
+            {
+                int end = Math.Min(offset + BulkInsertChunkSize, bars.Count);
+                var sql = new StringBuilder("INSERT OR REPLACE INTO bars_1m (ts, product, open, high, low, close, volume, event) VALUES ");
+                for (int i = offset; i < end; i++)
+                {
+                    var bar = bars[i];
+                    if (i > offset)
+                    {
+                        sql.Append(',');
+                    }
+
+                    sql.Append('(')
+                       .Append(ToUnixSeconds(bar.EndTime)).Append(',')
+                       .Append(product).Append(',')
+                       .Append(((double)bar.Open).ToString(CultureInfo.InvariantCulture)).Append(',')
+                       .Append(((double)bar.High).ToString(CultureInfo.InvariantCulture)).Append(',')
+                       .Append(((double)bar.Low).ToString(CultureInfo.InvariantCulture)).Append(',')
+                       .Append(((double)bar.Close).ToString(CultureInfo.InvariantCulture)).Append(',')
+                       .Append(bar.Volume).Append(',')
+                       .Append(bar.Event)
+                       .Append(')');
+                }
+
+                using var cmd = _connection.CreateCommand();
+                cmd.Transaction = _transaction;
+                cmd.CommandText = sql.ToString();
+                cmd.ExecuteNonQuery();
             }
         }
 
@@ -616,6 +658,8 @@ namespace TaifexHisDbManager
             cmd.CommandText = @"
 PRAGMA journal_mode=WAL;
 PRAGMA synchronous=NORMAL;
+PRAGMA temp_store=MEMORY;
+PRAGMA cache_size=-200000;
 
 CREATE TABLE IF NOT EXISTS ticks (
     ts INTEGER NOT NULL,
@@ -661,8 +705,6 @@ CREATE INDEX IF NOT EXISTS idx_bars_ts ON bars_1m (ts);
                 checkpoint.CommandText = "PRAGMA wal_checkpoint(TRUNCATE);";
                 checkpoint.ExecuteNonQuery();
             }
-            _insertTick.Dispose();
-            _insertBar.Dispose();
             _deleteTicks.Dispose();
             _deleteBars.Dispose();
             _transaction.Dispose();

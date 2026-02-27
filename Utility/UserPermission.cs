@@ -59,10 +59,7 @@ namespace Utility
         private static string ResolveDefaultTargetUrl()
         {
 #if DEBUG
-            var overrideUrl = Environment.GetEnvironmentVariable("ZSERVER_TARGET_URL");
-            if (!string.IsNullOrWhiteSpace(overrideUrl))
-                return overrideUrl.Trim();
-            return "wss://zserver.magistock.com/ws";
+            return "ws://127.0.0.1:12362/ws";
 #else
             return "wss://zserver.magistock.com/ws";
 #endif

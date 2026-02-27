@@ -104,7 +104,7 @@ namespace ZenPlatform.Properties
 
 		[global::System.Configuration.UserScopedSettingAttribute()]
 		[global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
-		[global::System.Configuration.DefaultSettingValueAttribute("280")]
+		[global::System.Configuration.DefaultSettingValueAttribute("419")]
 		public double RightPanelWidth
 		{
 			get
@@ -119,7 +119,7 @@ namespace ZenPlatform.Properties
 
 		[global::System.Configuration.UserScopedSettingAttribute()]
 		[global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
-		[global::System.Configuration.DefaultSettingValueAttribute("220")]
+		[global::System.Configuration.DefaultSettingValueAttribute("425")]
 		public double TaskListHeight
 		{
 			get

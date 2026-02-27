@@ -3,18 +3,22 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="統計中"
-        Height="160" Width="360"
+        Height="170" Width="400"
         ResizeMode="NoResize"
         WindowStartupLocation="CenterOwner"
-        Background="#1E1E1E" Foreground="#E6E6E6">
+        Background="#1E1E1E" Foreground="#E6E6E6"
+        ShowInTaskbar="False">
     <Grid Margin="16">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
-            <RowDefinition Height="16"/>
+            <RowDefinition Height="8"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="8"/>
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <TextBlock Grid.Row="0" Text="資料庫統計中，請稍候..." FontSize="14"/>
-        <ProgressBar Grid.Row="2" Height="18" IsIndeterminate="True"/>
+        <TextBlock x:Name="MessageText" Grid.Row="0" Text="資料庫統計中，請稍候..." FontSize="14"/>
+        <TextBlock x:Name="PercentText" Grid.Row="2" HorizontalAlignment="Right" Foreground="#B0B0B0" FontSize="12" Text="0%"/>
+        <ProgressBar x:Name="MainProgressBar" Grid.Row="4" Height="18" Minimum="0" Maximum="100" Value="0" IsIndeterminate="False"/>
     </Grid>
 </Window>

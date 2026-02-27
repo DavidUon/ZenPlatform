@@ -10,6 +10,11 @@ namespace Charts
     public class BollingerOverlay : IOverlayIndicator
     {
         public string TagName => "布林通道";
+        private const string KeyMid = "BOLL_MID";
+        private const string KeyUp = "BOLL_UP";
+        private const string KeyDn = "BOLL_DN";
+        private const string KeyMetaPeriod = "BOLL_META_PERIOD";
+        private const string KeyMetaK = "BOLL_META_K";
 
         private int _period = 20;
         private double _k = 2.0;
@@ -67,7 +72,10 @@ namespace Charts
         public void OnDataChanged(List<GraphKBar> bars)
         {
             _bars = bars;
-            Recalc();
+            if (!TryLoadFromIndicators())
+            {
+                Recalc();
+            }
         }
 
         public void OnViewportChanged(int visibleStart, int visibleCount, double spacing)
@@ -193,11 +201,47 @@ namespace Charts
                 if (i < _bars.Count)
                 {
                     var indicators = _bars[i].Indicators;
-                    indicators["BOLL_MID"] = (decimal)_mid[i];
-                    indicators["BOLL_UP"] = (decimal)_up[i];
-                    indicators["BOLL_DN"] = (decimal)_dn[i];
+                    indicators[KeyMid] = (decimal)_mid[i];
+                    indicators[KeyUp] = (decimal)_up[i];
+                    indicators[KeyDn] = (decimal)_dn[i];
+                    indicators[KeyMetaPeriod] = _period;
+                    indicators[KeyMetaK] = (decimal)_k;
                 }
             }
+        }
+
+        private bool TryLoadFromIndicators()
+        {
+            if (_bars.Count == 0) return false;
+            _mid = new double[_bars.Count];
+            _up = new double[_bars.Count];
+            _dn = new double[_bars.Count];
+            for (int i = 0; i < _bars.Count; i++)
+            {
+                var ind = _bars[i].Indicators;
+                if (ind == null) return false;
+                if (!ind.TryGetValue(KeyMetaPeriod, out var cachedPeriod) ||
+                    !ind.TryGetValue(KeyMetaK, out var cachedK))
+                {
+                    return false;
+                }
+
+                if ((int)cachedPeriod != _period || Math.Abs((double)cachedK - _k) > 1e-12)
+                {
+                    return false;
+                }
+
+                if (!ind.TryGetValue(KeyMid, out var mid) ||
+                    !ind.TryGetValue(KeyUp, out var up) ||
+                    !ind.TryGetValue(KeyDn, out var dn))
+                {
+                    return false;
+                }
+                _mid[i] = (double)mid;
+                _up[i] = (double)up;
+                _dn[i] = (double)dn;
+            }
+            return true;
         }
 
         private void UpdateBandBrush()

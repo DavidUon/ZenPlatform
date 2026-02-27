@@ -8,6 +8,12 @@
     <UseWindowsForms>true</UseWindowsForms>
     <RootNamespace>TaifexHisDbManager</RootNamespace>
   </PropertyGroup>
+  <PropertyGroup Condition="'$(PublishDir)'!=''">
+    <DebugType>none</DebugType>
+    <DebugSymbols>false</DebugSymbols>
+    <IncludeSymbols>false</IncludeSymbols>
+    <CopyOutputSymbolsToPublishDirectory>false</CopyOutputSymbolsToPublishDirectory>
+  </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.0" />

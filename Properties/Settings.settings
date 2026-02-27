@@ -20,10 +20,10 @@
       <Value Profile="(Default)">0</Value>
     </Setting>
     <Setting Name="RightPanelWidth" Type="System.Double" Scope="User">
-      <Value Profile="(Default)">280</Value>
+      <Value Profile="(Default)">419</Value>
     </Setting>
     <Setting Name="TaskListHeight" Type="System.Double" Scope="User">
-      <Value Profile="(Default)">220</Value>
+      <Value Profile="(Default)">425</Value>
     </Setting>
   </Settings>
 </SettingsFile>

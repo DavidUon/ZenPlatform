@@ -5,6 +5,7 @@ namespace ZenPlatform.LogText
         預設,
         黃色,
         藍色,
-        紅色
+        紅色,
+        綠色
     }
 }

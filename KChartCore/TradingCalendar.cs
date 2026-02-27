@@ -14,7 +14,6 @@ namespace KChartCore
     {
         private readonly HashSet<DateTime> _holidays = new();
         private readonly HashSet<DateTime> _specialOpenDays = new();
-
         /// <summary>
         /// 建立一個交易日曆物件，並從指定的 CSV 檔案載入規則。
         /// </summary>
@@ -23,7 +22,7 @@ namespace KChartCore
         {
             if (!File.Exists(csvPath))
             {
-                CreateDefaultTradingCalendarFile(csvPath);
+                return;
             }
 
             // 讀取 CSV 檔案，跳過註解行
@@ -85,62 +84,5 @@ namespace KChartCore
             return true;
         }
 
-        /// <summary>
-        /// 建立預設的交易日曆檔案
-        /// </summary>
-        private void CreateDefaultTradingCalendarFile(string csvPath)
-        {
-            try
-            {
-                var defaultContent = @"# --- 說明 ---
-# 市場開休市設定檔
-# 格式: YYYY-MM-DD,狀態,註解
-# 狀態: 請填寫 '開市' 或 '休市'。
-#開頭的該行文字均為註解
-
-2025-01-01,休市,元旦
-2025-01-23,休市,農曆春節前僅交割
-2025-01-24,休市,農曆春節前僅交割
-2025-01-27,休市,農曆春節 (調整放假)
-2025-01-28,休市,農曆春節 (除夕)
-2025-01-29,休市,農曆春節 (初一)
-2025-01-30,休市,農曆春節 (初二)
-2025-01-31,休市,農曆春節 (初三)
-2025-02-08,休市,補行上班日，但股市不開盤
-2025-02-28,休市,和平紀念日
-2025-04-03,休市,兒童節及清明節 (調整放假)
-2025-04-04,休市,兒童節及清明節
-2025-05-01,休市,勞動節
-2025-05-30,休市,端午節 (補假)
-2025-10-06,休市,中秋節
-2025-10-10,休市,國慶日
-
-# --- 2026年 臺灣證券交易所/期貨交易所 公告休市日 ---
-2026-01-01,休市,元旦
-2026-02-16,休市,農曆春節
-2026-02-17,休市,農曆春節
-2026-02-18,休市,農曆春節
-2026-02-19,休市,農曆春節
-2026-02-20,休市,農曆春節 (補假)
-2026-02-27,休市,和平紀念日 (補假)
-2026-04-03,休市,兒童節 (補假)
-2026-04-06,休市,清明節 (補假)
-2026-05-01,休市,勞動節
-2026-06-19,休市,端午節
-2026-09-25,休市,中秋節
-2026-09-28,休市,教師節
-2026-10-09,休市,國慶日 (補假)
-2026-10-26,休市,臺灣光復暨金門古寧頭大捷紀念日 (補假)
-2026-12-25,休市,行憲紀念日
-";
-
-                File.WriteAllText(csvPath, defaultContent, System.Text.Encoding.UTF8);
-                Console.WriteLine($"[Info] Default trading calendar file created successfully");
-            }
-            catch
-            {
-                // Ignore file creation failures and rely on weekend rules.
-            }
-        }
     }
 }

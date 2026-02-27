@@ -5,7 +5,8 @@
         WindowStartupLocation="CenterOwner"
         SizeToContent="WidthAndHeight"
         Background="{StaticResource BrushWindowBackground}"
-        Foreground="{StaticResource BrushText}">
+        Foreground="{StaticResource BrushText}"
+        ShowInTaskbar="False">
     <ScrollViewer VerticalScrollBarVisibility="Auto">
         <StackPanel Margin="20">
             <TextBlock Text="註冊Magistock帳號"

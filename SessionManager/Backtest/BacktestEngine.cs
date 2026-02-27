@@ -1,6 +1,5 @@
 using System;
 using ZenPlatform.Core;
-using ZenPlatform.Debug;
 
 namespace ZenPlatform.SessionManager.Backtest
 {
@@ -8,9 +7,14 @@ namespace ZenPlatform.SessionManager.Backtest
     {
         private readonly SessionManager _manager;
         private readonly Core.KChartBridge _chartBridge;
+        private readonly System.Windows.Threading.Dispatcher? _uiDispatcher;
         private bool _initialized;
         private bool _prevAcceptPriceTicks;
         private bool _prevAcceptSecondTicks;
+        private bool _prevEnableParallelBacktestTickDispatch;
+        private int _prevParallelBacktestTickMaxDegreeOfParallelism;
+        private int _prevParallelBacktestTickMinSessionCount;
+        private decimal _prevBacktestTickMinDiffToProcess;
         private Func<int, System.Collections.Generic.List<KChartCore.FunctionKBar>>? _prevFetchHistoryBars;
         private Action<int>? _prevRegisterKBarPeriod;
         private Action<int>? _prevUnregisterKBarPeriod;
@@ -26,16 +30,20 @@ namespace ZenPlatform.SessionManager.Backtest
         private long _processedUnits;
         private int _lastPercent = -1;
         private int _stopNotified;
+        private DateTime? _lastEquityBucket;
 
         public event Action<int>? ProgressChanged;
         public event Action<bool>? Stopped;
         public bool UseBarCloseTimeSignal { get; set; }
+        public decimal TickMinDiffToProcess { get; set; } = 1m;
+        public BacktestRecorder? Recorder { get; set; }
 
         public BacktestEngine(SessionManager manager)
         {
             _manager = manager ?? throw new ArgumentNullException(nameof(manager));
             _chartBridge = new Core.KChartBridge(new KChartCore.BacktestKChartEngine());
             _chartBridge.KBarCompleted += OnKBarCompleted;
+            _uiDispatcher = System.Windows.Application.Current?.Dispatcher;
         }
 
         public SessionManager Manager => _manager;
@@ -50,16 +58,23 @@ namespace ZenPlatform.SessionManager.Backtest
             _initialized = true;
             _prevAcceptPriceTicks = _manager.AcceptPriceTicks;
             _prevAcceptSecondTicks = _manager.AcceptSecondTicks;
+            _prevEnableParallelBacktestTickDispatch = _manager.EnableParallelBacktestTickDispatch;
+            _prevParallelBacktestTickMaxDegreeOfParallelism = _manager.ParallelBacktestTickMaxDegreeOfParallelism;
+            _prevParallelBacktestTickMinSessionCount = _manager.ParallelBacktestTickMinSessionCount;
+            _prevBacktestTickMinDiffToProcess = _manager.BacktestTickMinDiffToProcess;
             _prevFetchHistoryBars = _manager.FetchHistoryBars;
             _prevRegisterKBarPeriod = _manager.RegisterKBarPeriod;
             _prevUnregisterKBarPeriod = _manager.UnregisterKBarPeriod;
             _prevIsHistoryReady = _manager.IsHistoryReady;
             _prevLogMaxLines = _manager.Log.MaxLines;
+            _manager.PrepareBacktestQuoteIsolation();
             _manager.IsBacktestActive = true;
             _manager.BacktestStatusText = "回測中";
             _manager.BacktestProgressPercent = 0;
             _manager.AcceptPriceTicks = false;
             _manager.AcceptSecondTicks = false;
+            _manager.EnableParallelBacktestTickDispatch = false;
+            _manager.BacktestTickMinDiffToProcess = TickMinDiffToProcess;
             _manager.Log.SetMaxLines(500);
 
             _manager.FetchHistoryBars = period => _chartBridge.GetHistoryList(period);
@@ -69,6 +84,7 @@ namespace ZenPlatform.SessionManager.Backtest
 
             _chartBridge.HistoryReady = true;
             _chartBridge.RegisterPeriod(_manager.RuleSet.KbarPeriod);
+            _lastEquityBucket = null;
 
             _consumerTask = System.Threading.Tasks.Task.Run(() => ConsumeAsync(_cts.Token));
         }
@@ -155,6 +171,27 @@ namespace ZenPlatform.SessionManager.Backtest
                 return;
             }
 
+            if (period == 1)
+            {
+                var recorder = Recorder;
+                if (recorder != null)
+                {
+                    try
+                    {
+                        recorder.AppendBar(bar.CloseTime, 1, bar.Open, bar.High, bar.Low, bar.Close, bar.Volume);
+                        TryAppendEquityCurve(bar.CloseTime);
+                    }
+                    catch (ObjectDisposedException)
+                    {
+                        // Backtest is stopping; ignore late writes.
+                    }
+                    catch (InvalidOperationException)
+                    {
+                        // Recorder transaction may already be closed during shutdown.
+                    }
+                }
+            }
+
             if (UseBarCloseTimeSignal)
             {
                 _manager.OnSecond(bar.CloseTime);
@@ -170,39 +207,69 @@ namespace ZenPlatform.SessionManager.Backtest
                 return;
             }
 
-            if (_manager.RuleSet.KbarPeriod == period)
+            var kbar = new ZenPlatform.Strategy.KBar(bar.Open, bar.High, bar.Low, bar.Close, bar.Volume);
+            _manager.OnKBarCompleted(period, kbar);
+
+            // Persist trend side snapshot on 1-minute timeline.
+            // For higher-period callbacks (e.g. Auto mode 10m), this upserts
+            // the same minute key so the latest side decision wins.
+            var trendRecorder = Recorder;
+            if (trendRecorder != null)
             {
-                var closeStamp = new DateTime(bar.CloseTime.Year, bar.CloseTime.Month, bar.CloseTime.Day,
-                    bar.CloseTime.Hour, bar.CloseTime.Minute, 0, DateTimeKind.Unspecified);
-                if (_manager.LastIndicatorBarCloseTime.HasValue &&
-                    closeStamp <= _manager.LastIndicatorBarCloseTime.Value)
+                try
                 {
-                    return;
+                    trendRecorder.AppendTrendState(bar.CloseTime, 1, (int)_manager.CurrnetSide);
                 }
-
-                if (_manager.Indicators != null)
+                catch (ObjectDisposedException)
                 {
-                    lock (_manager.IndicatorSync)
-                    {
-                        _manager.Indicators.Update(new ZenPlatform.Indicators.KBar(bar.StartTime, bar.Open, bar.High, bar.Low, bar.Close, bar.Volume));
-                        _manager.LastIndicatorBarCloseTime = closeStamp;
-
-                        if (_manager.IndicatorsReadyForLog && !_manager.SuppressIndicatorLog)
-                        {
-                        }
-                    }
+                    // Backtest is stopping; ignore late writes.
                 }
-                else
+                catch (InvalidOperationException)
                 {
-                    _manager.LastIndicatorBarCloseTime = closeStamp;
+                    // Recorder transaction may already be closed during shutdown.
                 }
             }
+        }
 
-            _manager.OnKBarCompleted(period, bar);
+        private void TryAppendEquityCurve(DateTime barCloseTime)
+        {
+            var recorder = Recorder;
+            if (recorder == null)
+            {
+                return;
+            }
+
+            // 10-minute sampling: 00,10,20,30,40,50
+            var bucket = new DateTime(
+                barCloseTime.Year,
+                barCloseTime.Month,
+                barCloseTime.Day,
+                barCloseTime.Hour,
+                (barCloseTime.Minute / 10) * 10,
+                0,
+                barCloseTime.Kind);
+
+            if (_lastEquityBucket.HasValue && _lastEquityBucket.Value == bucket)
+            {
+                return;
+            }
+
+            decimal totalFloat = 0m;
+            decimal totalRealized = 0m;
+            foreach (var session in _manager.Sessions)
+            {
+                totalFloat += session.FloatProfit;
+                totalRealized += session.RealizedProfit;
+            }
+
+            var totalProfit = totalFloat + totalRealized;
+            recorder.AppendEquityCurve(bucket, totalProfit, totalFloat, totalRealized);
+            _lastEquityBucket = bucket;
         }
 
         public void Dispose()
         {
+            Recorder = null;
             NotifyStopped(canceled: true);
             _cts.Cancel();
             try
@@ -220,6 +287,10 @@ namespace ZenPlatform.SessionManager.Backtest
             _manager.IsHistoryReady = _prevIsHistoryReady;
             _manager.AcceptPriceTicks = _prevAcceptPriceTicks;
             _manager.AcceptSecondTicks = _prevAcceptSecondTicks;
+            _manager.EnableParallelBacktestTickDispatch = _prevEnableParallelBacktestTickDispatch;
+            _manager.ParallelBacktestTickMaxDegreeOfParallelism = _prevParallelBacktestTickMaxDegreeOfParallelism;
+            _manager.ParallelBacktestTickMinSessionCount = _prevParallelBacktestTickMinSessionCount;
+            _manager.BacktestTickMinDiffToProcess = _prevBacktestTickMinDiffToProcess;
             _manager.Log.SetMaxLines(_prevLogMaxLines > 0 ? _prevLogMaxLines : 5000);
             _drainTcs.TrySetCanceled();
         }
@@ -231,11 +302,24 @@ namespace ZenPlatform.SessionManager.Backtest
                 return;
             }
 
-            _manager.IsBacktestActive = false;
-            _manager.BacktestStatusText = string.Empty;
-            _manager.BacktestProgressPercent = 0;
-            Stopped?.Invoke(canceled);
-            _manager.RaiseBacktestStopped(canceled);
+            void Raise()
+            {
+                _manager.ClearBacktestQuoteIsolation();
+                _manager.IsBacktestActive = false;
+                _manager.BacktestStatusText = string.Empty;
+                _manager.BacktestProgressPercent = 0;
+                Stopped?.Invoke(canceled);
+                _manager.RaiseBacktestStopped(canceled);
+            }
+
+            var dispatcher = _uiDispatcher ?? System.Windows.Application.Current?.Dispatcher;
+            if (dispatcher != null && !dispatcher.CheckAccess())
+            {
+                dispatcher.BeginInvoke(new Action(Raise));
+                return;
+            }
+
+            Raise();
         }
 
         private async System.Threading.Tasks.Task ConsumeAsync(System.Threading.CancellationToken token)
@@ -286,6 +370,23 @@ namespace ZenPlatform.SessionManager.Backtest
             {
                 NotifyStopped(canceled: true);
             }
+            catch (Exception ex)
+            {
+                AddLogSafe($"BacktestEngine 消費執行緒例外:\n{ex}");
+                NotifyStopped(canceled: true);
+            }
+        }
+
+        private void AddLogSafe(string text)
+        {
+            var dispatcher = _uiDispatcher ?? System.Windows.Application.Current?.Dispatcher;
+            if (dispatcher != null && !dispatcher.CheckAccess())
+            {
+                dispatcher.BeginInvoke(new Action(() => _manager.Log.Add(text)));
+                return;
+            }
+
+            _manager.Log.Add(text);
         }
 
         private enum BacktestEventType

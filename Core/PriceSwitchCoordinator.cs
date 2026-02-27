@@ -43,6 +43,7 @@ namespace ZenPlatform.Core
 
         public void HandleSourceChanged(PriceManager.PriceSource from, PriceManager.PriceSource to)
         {
+            var shouldLogSwitch = from != PriceManager.PriceSource.None && to != PriceManager.PriceSource.None;
             var fromText = from switch
             {
                 PriceManager.PriceSource.Dde => "全都賺報價",
@@ -55,10 +56,17 @@ namespace ZenPlatform.Core
                 PriceManager.PriceSource.Network => "網路報價",
                 _ => ""
             };
-            var text = string.IsNullOrWhiteSpace(fromText)
-                ? $"報價切換:{toText}"
-                : $"報價切換:{fromText} -> {toText}";
-            if (_sourceChangeSkipCount > 0)
+            var text = (from, to) switch
+            {
+                (PriceManager.PriceSource.Network, PriceManager.PriceSource.None) => "網路報價發生問題",
+                (PriceManager.PriceSource.None, PriceManager.PriceSource.Network) => "網路報價恢復正常",
+                _ => $"切換報價到{toText}"
+            };
+            if (!shouldLogSwitch)
+            {
+                // Do not log transient none-state flaps; only log real source-to-source switches.
+            }
+            else if (_sourceChangeSkipCount > 0)
             {
                 _sourceChangeSkipCount--;
             }

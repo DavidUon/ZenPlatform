@@ -68,6 +68,9 @@ public sealed class Concord : IBroker
     private bool _loginInProgress;
     private bool _domesticLoginNotified;
     private bool _foreignLoginNotified;
+    private readonly object _loginReportSync = new();
+    private readonly List<string> _domesticLoginReports = new();
+    private readonly List<string> _foreignLoginReports = new();
     private readonly ConcurrentDictionary<string, OrderState> _ordersById = new(StringComparer.Ordinal);
     private int _orderCounter;
 
@@ -89,12 +92,18 @@ public sealed class Concord : IBroker
         {
             UpdateDomesticLoginState(code);
             UpdateDomesticConnectionState(code);
+            BufferLoginReport(isDomestic: true, category: "G", code, message);
             DomesticGeneralReport?.Invoke(code, message);
             OnBrokerNotify?.Invoke(BrokerNotifyType.DomesticGeneralReport, $"{code} {message}");
         };
-        _api.OnFErrorReport += (code, message) => DomesticErrorReport?.Invoke(code, message);
+        _api.OnFErrorReport += (code, message) =>
+        {
+            BufferLoginReport(isDomestic: true, category: "E", code, message);
+            DomesticErrorReport?.Invoke(code, message);
+        };
         _api.OnFOrderReport += (code, message) =>
         {
+            BufferLoginReport(isDomestic: true, category: "O", code, message);
             DomesticOrderReport?.Invoke(code, message);
             OnBrokerNotify?.Invoke(BrokerNotifyType.DomesticOrderReport, $"{code} {message}");
             HandleOrderReport(message);
@@ -103,12 +112,18 @@ public sealed class Concord : IBroker
         {
             UpdateForeignLoginState(code);
             UpdateForeignConnectionState(code);
+            BufferLoginReport(isDomestic: false, category: "G", code, message);
             ForeignGeneralReport?.Invoke(code, message);
             OnBrokerNotify?.Invoke(BrokerNotifyType.ForeignGeneralReport, $"{code} {message}");
         };
-        _api.OnFFErrorReport += (code, message) => ForeignErrorReport?.Invoke(code, message);
+        _api.OnFFErrorReport += (code, message) =>
+        {
+            BufferLoginReport(isDomestic: false, category: "E", code, message);
+            ForeignErrorReport?.Invoke(code, message);
+        };
         _api.OnFFOrderReport += (code, message) =>
         {
+            BufferLoginReport(isDomestic: false, category: "O", code, message);
             ForeignOrderReport?.Invoke(code, message);
             OnBrokerNotify?.Invoke(BrokerNotifyType.ForeignOrderReport, $"{code} {message}");
             HandleOrderReport(message);
@@ -475,8 +490,8 @@ public sealed class Concord : IBroker
 
         var fields = lines[0].Split(',');
         var available = fields.Length > 20 ? ParseDecimal(fields[20]) : 0m;
-        var todayPL = fields.Length > 11 ? ParseDecimal(fields[11]) : 0m;
-        return isAvailable ? available : available + todayPL;
+        var totalEquity = fields.Length > 17 ? ParseDecimal(fields[17]) : 0m;
+        return isAvailable ? available : totalEquity;
     }
 
     private static decimal ParseForeignMarginValue(string data, bool isAvailable)
@@ -493,7 +508,8 @@ public sealed class Concord : IBroker
             if (fields.Length > 19 && fields.Length > 2 && fields[2] == "***")
             {
                 var available = ParseDecimal(fields[19]);
-                return isAvailable ? available : available;
+                var totalEquity = fields.Length > 15 ? ParseDecimal(fields[15]) : 0m;
+                return isAvailable ? available : totalEquity;
             }
         }
 
@@ -529,7 +545,7 @@ public sealed class Concord : IBroker
         var timeInForce = form.IsMarketOrder ? "I" : "R";
         var orderPrice = form.IsMarketOrder
             ? 0m
-            : form.LimitPrice.Value;
+            : form.LimitPrice ?? 0m;
         if (orderPrice < 0)
         {
             orderPrice = 0;
@@ -588,7 +604,7 @@ public sealed class Concord : IBroker
         }
 
         var fields = ParseReportMessage(message);
-        if (!TryResolveOrder(fields, out var state))
+        if (!TryResolveOrder(fields, out var state) || state == null)
         {
             return;
         }
@@ -608,7 +624,19 @@ public sealed class Concord : IBroker
             return;
         }
 
-        if (!fields.TryGetValue("38", out var qtyText) || !fields.TryGetValue("44", out var priceText))
+        // Only execution reports should be treated as fills.
+        // Domestic FIX: 150=F(部分成交) / D(全部成交).
+        // Prevent treating send-status(150=I) as fills.
+        if (!fields.TryGetValue("150", out statusCode) ||
+            (!string.Equals(statusCode, "F", StringComparison.OrdinalIgnoreCase) &&
+             !string.Equals(statusCode, "D", StringComparison.OrdinalIgnoreCase)))
+        {
+            return;
+        }
+
+        // Use execution fields (LastQty/LastPx) for real filled price.
+        // 38/44 are order fields (OrderQty/Price) and can differ from actual fill.
+        if (!fields.TryGetValue("32", out var qtyText) || !fields.TryGetValue("31", out var priceText))
         {
             return;
         }
@@ -631,7 +659,7 @@ public sealed class Concord : IBroker
         state.AddFill(execQty, execPrice);
     }
 
-    private bool TryResolveOrder(Dictionary<string, string> fields, out OrderState state)
+    private bool TryResolveOrder(Dictionary<string, string> fields, out OrderState? state)
     {
         state = null;
 
@@ -755,6 +783,11 @@ public sealed class Concord : IBroker
         _loginInProgress = true;
         _domesticLoginNotified = false;
         _foreignLoginNotified = false;
+        lock (_loginReportSync)
+        {
+            _domesticLoginReports.Clear();
+            _foreignLoginReports.Clear();
+        }
 
         _ = Task.Run(async () =>
         {
@@ -800,6 +833,7 @@ public sealed class Concord : IBroker
 
     private void NotifyLoginResult(bool isDomestic, bool success)
     {
+        var loginTrace = BuildAndClearLoginTrace(isDomestic, success);
         if (isDomestic)
         {
             if (_domesticLoginNotified)
@@ -809,7 +843,7 @@ public sealed class Concord : IBroker
             _domesticLoginNotified = true;
             OnBrokerNotify?.Invoke(
                 success ? BrokerNotifyType.DomesticLoginSuccess : BrokerNotifyType.DomesticLoginFailed,
-                success.ToString());
+                loginTrace);
         }
         else
         {
@@ -820,7 +854,70 @@ public sealed class Concord : IBroker
             _foreignLoginNotified = true;
             OnBrokerNotify?.Invoke(
                 success ? BrokerNotifyType.ForeignLoginSuccess : BrokerNotifyType.ForeignLoginFailed,
-                success.ToString());
+                loginTrace);
         }
+    }
+
+    private void BufferLoginReport(bool isDomestic, string category, string code, string message)
+    {
+        if (!_loginInProgress)
+        {
+            return;
+        }
+
+        var content = string.IsNullOrWhiteSpace(message)
+            ? ResolveCodeDescription(code)
+            : message.Trim();
+        var line = $"[{category}] {(string.IsNullOrWhiteSpace(code) ? "---" : code.Trim())} {content}".Trim();
+        if (string.IsNullOrWhiteSpace(line))
+        {
+            return;
+        }
+
+        lock (_loginReportSync)
+        {
+            var target = isDomestic ? _domesticLoginReports : _foreignLoginReports;
+            target.Add(line);
+            const int maxReports = 30;
+            if (target.Count > maxReports)
+            {
+                target.RemoveAt(0);
+            }
+        }
+    }
+
+    private string BuildAndClearLoginTrace(bool isDomestic, bool success)
+    {
+        lock (_loginReportSync)
+        {
+            var target = isDomestic ? _domesticLoginReports : _foreignLoginReports;
+
+            if (success)
+            {
+                target.Clear();
+                return "success";
+            }
+
+            if (target.Count == 0)
+            {
+                return "failed(no_general_report)";
+            }
+
+            var text = string.Join(" | ", target);
+            target.Clear();
+            return text;
+        }
+    }
+
+    private static string ResolveCodeDescription(string? code)
+    {
+        if (string.IsNullOrWhiteSpace(code))
+        {
+            return string.Empty;
+        }
+
+        return CodeDescriptions.TryGetValue(code.Trim(), out var description)
+            ? description
+            : string.Empty;
     }
 }

@@ -3,7 +3,8 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="輸入數字" SizeToContent="WidthAndHeight" WindowStartupLocation="CenterOwner"
         ResizeMode="NoResize" Background="#101014" Foreground="#E8E8E8"
-        TextOptions.TextFormattingMode="Display" TextOptions.TextRenderingMode="ClearType" SnapsToDevicePixels="True">
+        TextOptions.TextFormattingMode="Display" TextOptions.TextRenderingMode="ClearType" SnapsToDevicePixels="True"
+        ShowInTaskbar="False">
     <Window.Resources>
         <Style x:Key="StrategyButtonStyle" TargetType="Button">
             <Setter Property="Background" Value="{StaticResource BrushButtonBackground}" />

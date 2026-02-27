@@ -12,7 +12,6 @@ using System.Windows.Data;
 using System.Windows.Media;
 using System.Windows.Input;
 using Microsoft.Data.Sqlite;
-using Forms = System.Windows.Forms;
 using Binding = System.Windows.Data.Binding;
 using Brush = System.Windows.Media.Brush;
 using Color = System.Windows.Media.Color;
@@ -32,7 +31,7 @@ namespace TaifexHisDbManager
         }
 
 
-        private readonly string _dbFolder;
+        private string _dbFolder;
         private readonly HashSet<int> _loadedYears = new();
         private readonly ValidationMode _mode;
         private readonly List<DateTime> _rangeClicks = new();
@@ -42,8 +41,8 @@ namespace TaifexHisDbManager
         public DateTime? SelectedStartDateTime { get; private set; }
         public DateTime? SelectedEndDateTime { get; private set; }
         public int SelectedPreloadDays { get; private set; } = 1;
-        public BacktestMode SelectedBacktestMode { get; private set; } = BacktestMode.Exact;
         public BacktestProduct SelectedBacktestProduct { get; private set; } = BacktestProduct.Tx;
+        public BacktestPrecision SelectedBacktestPrecision { get; private set; } = BacktestPrecision.Exact;
 
         internal DbValidationWindow(string dbFolder)
             : this(dbFolder, ValidationMode.Import)
@@ -55,6 +54,11 @@ namespace TaifexHisDbManager
             InitializeComponent();
             _dbFolder = dbFolder;
             _mode = mode;
+            MagistockStoragePaths.EnsureFolders();
+            if (string.IsNullOrWhiteSpace(_dbFolder))
+            {
+                _dbFolder = MagistockStoragePaths.MagistockLibPath;
+            }
             BuildTabs();
             YearTabs.SelectionChanged += OnTabSelectionChanged;
             StartDatePicker.SelectedDateChanged += OnRangePickerChanged;
@@ -98,14 +102,51 @@ namespace TaifexHisDbManager
             {
                 YearTabs.IsEnabled = false;
                 Mouse.OverrideCursor = Cursors.Wait;
-                tab.Content = new TextBlock
+
+                var loadingText = new TextBlock
                 {
                     Text = "載入中...",
-                    Margin = new Thickness(12),
+                    Margin = new Thickness(12, 12, 12, 8),
                     Foreground = new SolidColorBrush(Color.FromRgb(200, 200, 200))
                 };
+                var loadingProgress = new System.Windows.Controls.ProgressBar
+                {
+                    Height = 14,
+                    Minimum = 0,
+                    Maximum = 100,
+                    Value = 0,
+                    Margin = new Thickness(12, 0, 12, 4)
+                };
+                var loadingPercent = new TextBlock
+                {
+                    Text = "0%",
+                    Margin = new Thickness(12, 0, 12, 8),
+                    Foreground = new SolidColorBrush(Color.FromRgb(176, 176, 176))
+                };
+                var loadingPanel = new StackPanel();
+                loadingPanel.Children.Add(loadingText);
+                loadingPanel.Children.Add(loadingProgress);
+                loadingPanel.Children.Add(loadingPercent);
+                tab.Content = loadingPanel;
 
-                var statusMap = await System.Threading.Tasks.Task.Run(() => LoadDateStatuses(info.Path));
+                Dictionary<DateTime, DateStatus> statusMap;
+                statusMap = await System.Threading.Tasks.Task.Run(() =>
+                    LoadDateStatuses(
+                        info.Path,
+                        false,
+                        (current, total, message) =>
+                        {
+                            Dispatcher.Invoke(() =>
+                            {
+                                var percent = total <= 0 ? 0 : (int)System.Math.Round(current * 100.0 / total);
+                                loadingProgress.Value = percent;
+                                loadingText.Text = string.IsNullOrWhiteSpace(message)
+                                    ? "載入中..."
+                                    : message;
+                                loadingPercent.Text = $"{percent}%";
+                            });
+                        }));
+
                 var grid = BuildMonthGrid(info.Year, statusMap);
                 tab.Content = grid;
                 _loadedYears.Add(info.Year);
@@ -200,8 +241,8 @@ namespace TaifexHisDbManager
             SelectedStartDateTime = CombineDateTime(StartDatePicker.SelectedDate, StartTimeCombo.Text);
             SelectedEndDateTime = CombineDateTime(EndDatePicker.SelectedDate, EndTimeCombo.Text);
             SelectedPreloadDays = ParsePreloadDays();
-            SelectedBacktestMode = GetSelectedBacktestMode();
             SelectedBacktestProduct = GetSelectedBacktestProduct();
+            SelectedBacktestPrecision = GetSelectedBacktestPrecision();
             DialogResult = true;
             Close();
         }
@@ -211,8 +252,8 @@ namespace TaifexHisDbManager
             SelectedStartDateTime = CombineDateTime(StartDatePicker.SelectedDate, StartTimeCombo.Text);
             SelectedEndDateTime = CombineDateTime(EndDatePicker.SelectedDate, EndTimeCombo.Text);
             SelectedPreloadDays = ParsePreloadDays();
-            SelectedBacktestMode = GetSelectedBacktestMode();
             SelectedBacktestProduct = GetSelectedBacktestProduct();
+            SelectedBacktestPrecision = GetSelectedBacktestPrecision();
             DialogResult = false;
             Close();
         }
@@ -336,7 +377,8 @@ namespace TaifexHisDbManager
 
         private void OnImportOfficialHistory(object sender, RoutedEventArgs e)
         {
-            string dbOutputFolder = Path.Combine(AppContext.BaseDirectory, "回測歷史資料庫");
+            MagistockStoragePaths.EnsureFolders();
+            string dbOutputFolder = MagistockStoragePaths.MagistockLibPath;
 
             var window = new ImportRunWindow(dbOutputFolder)
             {
@@ -350,12 +392,15 @@ namespace TaifexHisDbManager
         {
             var message =
                 "先將下載好的 台灣期貨交易所成交簡檔 放入同一個資料夾中，並於程式中選擇該資料夾。\n\n" +
-                "按下【轉換】後，系統將會把此資料夾內的所有檔案匯入至系統資料庫中自動管理。\n\n" +
-                "匯入完成後，處理完成的檔案會自動移動至來源資料夾中的 「已匯入」 子資料夾做分類，\n" +
+                "按下【開始匯入】後，系統將會把此資料夾內的所有檔案匯入至系統資料庫中自動管理。\n\n" +
+                "系統只認定一個「系統資料庫路徑」(根目錄)。\n" +
+                "回測資料庫、台指二號回測報表、已匯入檔案都會放在這個根目錄下，由系統自動建立與管理。\n\n" +
+                "匯入完成後，處理完成的檔案會自動移動至系統資料庫根目錄下的「期貨交易所下載Zip\\已匯入」做分類，\n" +
                 "您可以移動或刪除這些已經匯入的資料，系統只靠轉換過的資料進行運作。\n\n" +
                 "支援的來源檔案格式包含：\n\n" +
                 "。原始下載的 ZIP 壓縮檔\n" +
-                "。已解壓縮的 CSV 檔案\n\n" +
+                "。已解壓縮的 CSV 檔案\n" +
+                "。從其他地方複製的 Magistock 歷史資料\n\n" +
                 "注意事項：\n" +
                 "每年的歷史資料檔案大小約為 2GB，請確保硬碟空間充足，以避免轉換失敗。";
             var window = new ImportHelpWindow(message)
@@ -504,8 +549,8 @@ namespace TaifexHisDbManager
                 if (settings.PreloadDays > 0)
                     PreloadDaysTextBox.Text = settings.PreloadDays.ToString();
 
-                ApplyBacktestMode(settings.BacktestMode);
                 ApplyBacktestProduct(settings.BacktestProduct);
+                ApplyBacktestPrecision(settings.BacktestPrecision);
                 UpdateRangeFromPickers();
                 RefreshMonthGrids();
             }
@@ -528,8 +573,8 @@ namespace TaifexHisDbManager
                     StartTime = StartTimeCombo.Text?.Trim() ?? string.Empty,
                     EndTime = EndTimeCombo.Text?.Trim() ?? string.Empty,
                     PreloadDays = preloadDays,
-                    BacktestMode = GetSelectedBacktestMode() == BacktestMode.Fast ? "Fast" : "Exact",
-                    BacktestProduct = GetSelectedBacktestProduct().ToString()
+                    BacktestProduct = GetSelectedBacktestProduct().ToString(),
+                    BacktestPrecision = GetSelectedBacktestPrecision().ToString()
                 };
 
                 string json = JsonSerializer.Serialize(settings, new JsonSerializerOptions { WriteIndented = true });
@@ -548,32 +593,8 @@ namespace TaifexHisDbManager
             public string StartTime { get; set; } = string.Empty;
             public string EndTime { get; set; } = string.Empty;
             public int PreloadDays { get; set; } = 1;
-            public string BacktestMode { get; set; } = "Exact";
             public string BacktestProduct { get; set; } = nameof(global::TaifexHisDbManager.BacktestProduct.Tx);
-        }
-
-        private void ApplyBacktestMode(string? mode)
-        {
-            if (string.Equals(mode, "Fast", System.StringComparison.OrdinalIgnoreCase))
-            {
-                if (FastBacktestRadio != null)
-                    FastBacktestRadio.IsChecked = true;
-                if (ExactBacktestRadio != null)
-                    ExactBacktestRadio.IsChecked = false;
-                return;
-            }
-
-            if (ExactBacktestRadio != null)
-                ExactBacktestRadio.IsChecked = true;
-            if (FastBacktestRadio != null)
-                FastBacktestRadio.IsChecked = false;
-        }
-
-        private BacktestMode GetSelectedBacktestMode()
-        {
-            if (FastBacktestRadio != null && FastBacktestRadio.IsChecked == true)
-                return BacktestMode.Fast;
-            return BacktestMode.Exact;
+            public string BacktestPrecision { get; set; } = nameof(global::TaifexHisDbManager.BacktestPrecision.Exact);
         }
 
         private void ApplyBacktestProduct(string? product)
@@ -609,6 +630,41 @@ namespace TaifexHisDbManager
             }
 
             return BacktestProduct.Tx;
+        }
+
+        private void ApplyBacktestPrecision(string? precision)
+        {
+            if (BacktestPrecisionCombo == null)
+            {
+                return;
+            }
+
+            if (string.Equals(precision, nameof(BacktestPrecision.Fast), System.StringComparison.OrdinalIgnoreCase))
+            {
+                BacktestPrecisionCombo.SelectedIndex = 1;
+                return;
+            }
+
+            if (string.Equals(precision, nameof(BacktestPrecision.UltraFast), System.StringComparison.OrdinalIgnoreCase))
+            {
+                BacktestPrecisionCombo.SelectedIndex = 2;
+                return;
+            }
+
+            BacktestPrecisionCombo.SelectedIndex = 0;
+        }
+
+        private BacktestPrecision GetSelectedBacktestPrecision()
+        {
+            if (BacktestPrecisionCombo?.SelectedItem is ComboBoxItem item &&
+                item.Tag != null &&
+                int.TryParse(item.Tag.ToString(), out var value) &&
+                System.Enum.IsDefined(typeof(BacktestPrecision), value))
+            {
+                return (BacktestPrecision)value;
+            }
+
+            return BacktestPrecision.Exact;
         }
 
         private static DateTime? CombineDateTime(DateTime? date, string? timeText)
@@ -695,7 +751,10 @@ namespace TaifexHisDbManager
             }
         }
 
-        private static Dictionary<DateTime, DateStatus> LoadDateStatuses(string dbPath)
+        private static Dictionary<DateTime, DateStatus> LoadDateStatuses(
+            string dbPath,
+            bool forceRefresh = false,
+            Action<int, int, string>? reportProgress = null)
         {
             var map = new Dictionary<DateTime, DateStatus>();
             if (!File.Exists(dbPath))
@@ -703,12 +762,36 @@ namespace TaifexHisDbManager
 
             long fileSize = new FileInfo(dbPath).Length;
             string cachePath = dbPath + ".status.json";
-            var cached = TryLoadCache(cachePath, fileSize);
+            var cached = forceRefresh ? null : TryLoadCache(cachePath, fileSize);
             if (cached is not null)
+            {
+                reportProgress?.Invoke(100, 100, "已使用快取資料");
                 return cached;
+            }
+
+            reportProgress?.Invoke(5, 100, "開啟資料庫...");
 
             using var connection = new SqliteConnection($"Data Source={dbPath}");
             connection.Open();
+
+            var totalDays = 0;
+            using (var countCmd = connection.CreateCommand())
+            {
+                countCmd.CommandText = @"
+SELECT COUNT(*)
+FROM (
+    SELECT date(datetime(ts, 'unixepoch', '+8 hours')) AS d
+    FROM ticks
+    GROUP BY d
+);";
+                var scalar = countCmd.ExecuteScalar();
+                if (scalar is long l)
+                    totalDays = (int)l;
+                else if (scalar is int i)
+                    totalDays = i;
+            }
+
+            reportProgress?.Invoke(10, 100, "統計日期狀態...");
 
             using var cmd = connection.CreateCommand();
             cmd.CommandText = @"
@@ -720,6 +803,7 @@ FROM ticks
 GROUP BY d;
 ";
             using var reader = cmd.ExecuteReader();
+            var processed = 0;
             while (reader.Read())
             {
                 string dateStr = reader.GetString(0);
@@ -738,9 +822,18 @@ GROUP BY d;
                 {
                     map[date] = DateStatus.NightOnly;
                 }
+
+                processed++;
+                if (totalDays > 0 && (processed % 10 == 0 || processed == totalDays))
+                {
+                    var current = 10 + (int)(processed * 85.0 / totalDays);
+                    if (current > 95) current = 95;
+                    reportProgress?.Invoke(current, 100, $"整理中 {processed}/{totalDays}");
+                }
             }
 
             TrySaveCache(cachePath, fileSize, map);
+            reportProgress?.Invoke(100, 100, "完成");
             return map;
         }
 

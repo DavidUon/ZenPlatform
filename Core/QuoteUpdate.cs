@@ -18,7 +18,8 @@ namespace ZenPlatform.Core
     public enum QuoteSource
     {
         Dde,
-        Network
+        Network,
+        Backtest
     }
 
     public sealed class QuoteUpdate

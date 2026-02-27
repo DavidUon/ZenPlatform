@@ -638,6 +638,33 @@ namespace Charts
                             }
                         }
                         break;
+                    case "ATR":
+                        AddIndicatorPanel(IndicatorPanelType.Atr);
+                        if (_paneByType.TryGetValue(IndicatorPanelType.Atr, out var atrPane) && atrPane is AtrPane atr)
+                        {
+                            var period = ic.AtrPeriod > 0 ? ic.AtrPeriod : 14;
+                            var color = string.IsNullOrEmpty(ic.AtrColorHex) ? atr.GetParameters().lineColor : HexToColor(ic.AtrColorHex!);
+                            atr.SetParameters(period, color);
+                            if (_historyCache != null && _historyCache.Count > 0)
+                            {
+                                atr.LoadHistory(_historyCache);
+                                var (start, spacing, _) = _mainPricePane.GetXViewState();
+                                atr.ApplyXViewState(start, spacing);
+                            }
+                        }
+                        break;
+                    case "HA":
+                        AddIndicatorPanel(IndicatorPanelType.Ha);
+                        if (_paneByType.TryGetValue(IndicatorPanelType.Ha, out var haPane) && haPane is HaPane ha)
+                        {
+                            if (_historyCache != null && _historyCache.Count > 0)
+                            {
+                                ha.LoadHistory(_historyCache);
+                                var (start, spacing, _) = _mainPricePane.GetXViewState();
+                                ha.ApplyXViewState(start, spacing);
+                            }
+                        }
+                        break;
                 }
             }
 
@@ -711,6 +738,18 @@ namespace Charts
                             DeaColorHex = ColorToHex(deaC)
                         });
                         break;
+                    case AtrPane atr:
+                        var (ap, ac) = atr.GetParameters();
+                        list.Add(new IndicatorConfig
+                        {
+                            Type = "ATR",
+                            AtrPeriod = ap,
+                            AtrColorHex = ColorToHex(ac)
+                        });
+                        break;
+                    case HaPane:
+                        list.Add(new IndicatorConfig { Type = "HA" });
+                        break;
                 }
             }
             return list;
@@ -770,6 +809,20 @@ namespace Charts
             }
         }
 
+        public void SetAtrParameters(int period, System.Windows.Media.Color color)
+        {
+            if (_paneByType.TryGetValue(IndicatorPanelType.Atr, out var pane) && pane is AtrPane atr)
+            {
+                atr.SetParameters(period, color);
+                if (_historyCache != null && _historyCache.Count > 0)
+                {
+                    atr.LoadHistory(_historyCache);
+                    var (start, spacing, _) = _mainPricePane.GetXViewState();
+                    atr.ApplyXViewState(start, spacing);
+                }
+            }
+        }
+
         // 外部只需呼叫一次：自動彈出設定視窗並套用
         public bool SetIndicatorPara(IndicatorPanelType type, Window? owner = null)
         {
@@ -802,6 +855,18 @@ namespace Charts
                         macdPane.SetLineColors(dlgM.DifColor, dlgM.DeaColor);
                     }
                     return okM;
+                case IndicatorPanelType.Atr:
+                    if (!_paneByType.ContainsKey(IndicatorPanelType.Atr))
+                        AddIndicatorPanel(IndicatorPanelType.Atr);
+                    var atrPane = (AtrPane)_paneByType[IndicatorPanelType.Atr];
+                    var (pAtr, cAtr) = atrPane.GetParameters();
+                    var dlgA = new AtrSettingsDialog(pAtr, cAtr) { Owner = owner };
+                    var okA = dlgA.ShowDialog() == true;
+                    if (okA)
+                    {
+                        SetAtrParameters(dlgA.Period, dlgA.LineColor);
+                    }
+                    return okA;
                 default:
                     // 其他指標之後擴充
                     return false;
@@ -924,6 +989,49 @@ namespace Charts
             }
             return ok;
         }
+
+        // Overlay: SAR
+        public void AddSarOverlay(decimal step = 0.02m, decimal max = 0.2m, System.Windows.Media.Color? color = null)
+        {
+            var col = color ?? System.Windows.Media.Color.FromRgb(0x00, 0xC8, 0xFF);
+            _mainPricePane.AddOverlay(new SarOverlay(step, max, col));
+        }
+
+        public void RemoveSarOverlay()
+        {
+            _mainPricePane.RemoveOverlaysByTag("SAR");
+            _mainPricePane.RemoveOverlayTag("SAR");
+        }
+
+        public bool SetOverlayPara_Sar(Window? owner = null)
+        {
+            decimal defStep = 0.02m;
+            decimal defMax = 0.2m;
+            System.Windows.Media.Color defColor = System.Windows.Media.Color.FromRgb(0x00, 0xC8, 0xFF);
+
+            try
+            {
+                var curr = _mainPricePane.GetOverlayConfigs().FirstOrDefault(o => o.Type == "SAR");
+                if (curr != null)
+                {
+                    if (curr.SarStep > 0) defStep = (decimal)curr.SarStep;
+                    if (curr.SarMax > 0) defMax = (decimal)curr.SarMax;
+                    if (!string.IsNullOrEmpty(curr.ColorHex))
+                        defColor = (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(curr.ColorHex!);
+                }
+            }
+            catch { }
+
+            var dlg = new SarSettingsDialog(defStep, defMax, defColor) { Owner = owner };
+            var ok = dlg.ShowDialog() == true;
+            if (ok)
+            {
+                _mainPricePane.RemoveOverlaysByTag("SAR");
+                _mainPricePane.AddOverlay(new SarOverlay(dlg.Step, dlg.Max, dlg.DotColor));
+            }
+            return ok;
+        }
+
 
         // === MA Overlay ===
         public void AddMaOverlay(int period, string maType, System.Windows.Media.Color color)
