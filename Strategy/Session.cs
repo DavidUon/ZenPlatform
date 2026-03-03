@@ -17,10 +17,11 @@ namespace ZenPlatform.Strategy
         private bool _isFailed;
         private decimal _minTotalProfitSeen;
         private decimal _worstTotalProfit;
-        private decimal _minTotalProfitForRiseExit = decimal.MaxValue;
+        private decimal _bestTotalProfit;
         private bool _riseFromDrawdownArmed;
         private bool _coverLossArmed;
         private bool _totalProfitDropAfterTriggerArmed;
+        private decimal _totalProfitDropAfterTriggerPeak;
         private bool _profitMaExitArmed;
         private bool _lossMaExitArmed;
         private bool _hasLastPriceForSharedMaCross;
@@ -34,7 +35,6 @@ namespace ZenPlatform.Strategy
         private static readonly IExitRule[] _commonExitRules =
         {
             new CloseBeforeSessionEndExitRule(),
-            new LongHolidayCloseExitRule(),
             new AutoStopLossExitRule()
         };
         private static readonly IExitRule[] _tickExitRules =
@@ -49,7 +49,6 @@ namespace ZenPlatform.Strategy
             new TakeProfitExitRule()
         };
         internal DateTime? LastBacktestUiRefreshBucket { get; set; }
-        private const decimal CoverLossExitTarget = 2m;
 
         public DateTime StartTime
         {
@@ -129,7 +128,7 @@ namespace ZenPlatform.Strategy
                 _floatProfit = value;
                 OnPropertyChanged(nameof(FloatProfit));
                 OnPropertyChanged(nameof(TotalProfit));
-                TrackWorstTotalProfit();
+                TrackTotalProfitExtremes();
             }
         }
 
@@ -142,7 +141,7 @@ namespace ZenPlatform.Strategy
                 _realizedProfit = value;
                 OnPropertyChanged(nameof(RealizedProfit));
                 OnPropertyChanged(nameof(TotalProfit));
-                TrackWorstTotalProfit();
+                TrackTotalProfitExtremes();
             }
         }
 
@@ -193,7 +192,9 @@ namespace ZenPlatform.Strategy
         }
 
         public decimal TotalProfit => FloatProfit + RealizedProfit;
+        public decimal MaxProfit => _bestTotalProfit > 0m ? _bestTotalProfit : 0m;
         public decimal MaxTotalLoss => _worstTotalProfit < 0m ? _worstTotalProfit : 0m;
+        internal decimal BestTotalProfit => _bestTotalProfit;
         internal decimal WorstTotalProfit => _worstTotalProfit;
 
         public void Start(bool isBuy, string reason)
@@ -207,10 +208,11 @@ namespace ZenPlatform.Strategy
             ReverseCount = 0;
             _minTotalProfitSeen = 0m;
             _worstTotalProfit = 0m;
-            _minTotalProfitForRiseExit = decimal.MaxValue;
+            _bestTotalProfit = 0m;
             _riseFromDrawdownArmed = false;
             _coverLossArmed = false;
             _totalProfitDropAfterTriggerArmed = false;
+            _totalProfitDropAfterTriggerPeak = 0m;
             _profitMaExitArmed = false;
             _lossMaExitArmed = false;
             _hasLastPriceForSharedMaCross = false;
@@ -219,6 +221,7 @@ namespace ZenPlatform.Strategy
             _entryRangeBoundA = 0m;
             _entryRangeBoundV = 0m;
             IsFailed = false;
+            OnPropertyChanged(nameof(MaxProfit));
             OnPropertyChanged(nameof(MaxTotalLoss));
             SetFinished(false);
             var qty = Manager?.RuleSet.OrderSize ?? 1;
@@ -357,13 +360,25 @@ namespace ZenPlatform.Strategy
             OnPropertyChanged(nameof(MaxTotalLoss));
         }
 
-        internal void ApplyRolloverSpread(decimal spread)
+        internal void RestoreBestTotalProfit(decimal bestTotalProfit)
+        {
+            if (bestTotalProfit <= _bestTotalProfit)
+            {
+                return;
+            }
+
+            _bestTotalProfit = bestTotalProfit;
+            OnPropertyChanged(nameof(MaxProfit));
+        }
+
+        internal void ApplyRolloverSpread(decimal spread, bool emitLog = false)
         {
             if (PositionManager.TotalKou == 0 || spread == 0m)
             {
                 return;
             }
 
+            var beforeAvg = PositionManager.AvgEntryPrice;
             var snapshot = PositionManager.ToSnapshot();
             snapshot.AvgEntryPrice += spread;
             PositionManager.FromSnapshot(snapshot);
@@ -378,6 +393,11 @@ namespace ZenPlatform.Strategy
             AvgEntryPrice = PositionManager.AvgEntryPrice;
             FloatProfit = PositionManager.FloatProfit;
             RealizedProfit = PositionManager.PingProfit;
+
+            if (emitLog && beforeAvg != AvgEntryPrice)
+            {
+                PutStr($"結算日自動換月調整平均成本：{beforeAvg:0.##} -> {AvgEntryPrice:0.##} (價差 {spread:0.##})");
+            }
         }
 
         public override void OnTick()
@@ -646,13 +666,11 @@ namespace ZenPlatform.Strategy
             if (!riseExitEnabled)
             {
                 _riseFromDrawdownArmed = false;
-                _minTotalProfitForRiseExit = decimal.MaxValue;
             }
             var totalProfitDropEnabled =
                 ruleSet.ExitOnTotalProfitDropAfterTrigger &&
                 ruleSet.ExitOnTotalProfitDropTriggerPoints > 0 &&
-                ruleSet.ExitOnTotalProfitDropExitPoints >= 0 &&
-                ruleSet.ExitOnTotalProfitDropExitPoints < ruleSet.ExitOnTotalProfitDropTriggerPoints;
+                ruleSet.ExitOnTotalProfitDropExitPoints >= 0;
             if (totalTakeProfit <= 0 && floatTakeProfit <= 0 && stopLoss <= 0 && !riseExitEnabled && !totalProfitDropEnabled)
             {
                 return;
@@ -661,6 +679,7 @@ namespace ZenPlatform.Strategy
             var entry = PositionManager.AvgEntryPrice;
             var position = PositionManager.TotalKou;
             var requiredFloatForTotalTp = totalTakeProfit - PositionManager.PingProfit;
+            var coverLossExitTarget = GetCoverLossRecoveryTarget(ruleSet);
             if (position > 0)
             {
                 // 任務總停利點數：已平倉損益 + 浮動損益 >= totalTakeProfit
@@ -671,35 +690,25 @@ namespace ZenPlatform.Strategy
                 var worstTotalInBar = PositionManager.PingProfit + (bar.Low - entry);
                 var bestTotalInBar = PositionManager.PingProfit + (bar.High - entry);
                 UpdateCoverLossArmed(worstTotalInBar, coverLossArmThreshold, ruleSet.CoverLossBeforeTakeProfit);
-                var requiredFloatForCoverLossExit = CoverLossExitTarget - PositionManager.PingProfit;
+                var requiredFloatForCoverLossExit = ruleSet.CoverLossMaxProfitCapEnabled
+                    ? Math.Max(1, ruleSet.CoverLossMaxProfitPoints)
+                    : coverLossExitTarget - PositionManager.PingProfit;
                 var coverLossExitPrice = requiredFloatForCoverLossExit <= 0m ? bar.Close : entry + requiredFloatForCoverLossExit;
                 var hitCoverLossExit = _coverLossArmed && ruleSet.CoverLossBeforeTakeProfit &&
                                        (requiredFloatForCoverLossExit <= 0m || bar.High >= coverLossExitPrice);
-                if (totalProfitDropEnabled && !_totalProfitDropAfterTriggerArmed && bestTotalInBar > ruleSet.ExitOnTotalProfitDropTriggerPoints)
-                {
-                    _totalProfitDropAfterTriggerArmed = true;
-                    PutStr($"任務總損益超過{ruleSet.ExitOnTotalProfitDropTriggerPoints}點，若低於{ruleSet.ExitOnTotalProfitDropExitPoints}點將平倉...");
-                }
-                var requiredFloatForDropExit = ruleSet.ExitOnTotalProfitDropExitPoints - PositionManager.PingProfit;
-                var dropExitPrice = requiredFloatForDropExit <= 0m ? bar.Close : entry + requiredFloatForDropExit;
+                UpdateTotalProfitDropAfterTriggerArmed(bestTotalInBar, ruleSet);
                 var hitTotalProfitDropExit = totalProfitDropEnabled && _totalProfitDropAfterTriggerArmed &&
-                                             worstTotalInBar < ruleSet.ExitOnTotalProfitDropExitPoints;
+                                             worstTotalInBar <= _totalProfitDropAfterTriggerPeak - ruleSet.ExitOnTotalProfitDropExitPoints;
                 var riseArmThreshold = -Math.Abs((decimal)ruleSet.ExitOnTotalProfitRiseArmBelowPoints);
                 if (riseExitEnabled && !_riseFromDrawdownArmed && worstTotalInBar <= riseArmThreshold)
                 {
                     _riseFromDrawdownArmed = true;
-                    _minTotalProfitForRiseExit = worstTotalInBar;
-                    PutStr($"任務總損益低於-{ruleSet.ExitOnTotalProfitRiseArmBelowPoints}點，若拉回{ruleSet.ExitOnTotalProfitRisePoints}點將平倉...");
+                    PutStr($"任務總損益低於-{ruleSet.ExitOnTotalProfitRiseArmBelowPoints}點，等待浮動損益達{ruleSet.ExitOnTotalProfitRisePoints}點平倉...");
                 }
-                if (riseExitEnabled && _riseFromDrawdownArmed && worstTotalInBar < _minTotalProfitForRiseExit)
-                {
-                    _minTotalProfitForRiseExit = worstTotalInBar;
-                }
-                var requiredTotalForRiseExit = _minTotalProfitForRiseExit + ruleSet.ExitOnTotalProfitRisePoints;
-                var requiredFloatForRiseExit = requiredTotalForRiseExit - PositionManager.PingProfit;
-                var riseExitPrice = requiredFloatForRiseExit <= 0m ? bar.Close : entry + requiredFloatForRiseExit;
+                var requiredFloatForRiseExit = Math.Max(1, ruleSet.ExitOnTotalProfitRisePoints);
+                var riseExitPrice = entry + requiredFloatForRiseExit;
                 var hitRiseExit = riseExitEnabled && _riseFromDrawdownArmed &&
-                                  (requiredFloatForRiseExit <= 0m || bar.High >= riseExitPrice);
+                                  bar.High >= riseExitPrice;
                 var hitTotalTp = totalTakeProfit > 0 && (requiredFloatForTotalTp <= 0m || bar.High >= totalTpPrice);
                 var hitFloatTp = floatTakeProfit > 0 && bar.High >= floatTpPrice;
                 var hitTp = hitTotalTp || hitFloatTp;
@@ -726,14 +735,14 @@ namespace ZenPlatform.Strategy
 
                 if (hitRiseExit)
                 {
-                    ForcePosition(0, BuildRiseExitReason(ruleSet.ExitOnTotalProfitRiseArmBelowPoints, ruleSet.ExitOnTotalProfitRisePoints, _minTotalProfitForRiseExit), isFinishClose: true);
+                    ForcePosition(0, BuildRiseExitReason(ruleSet.ExitOnTotalProfitRiseArmBelowPoints, ruleSet.ExitOnTotalProfitRisePoints), isFinishClose: true);
                     SetFinished(true);
                     return;
                 }
 
                 if (hitTotalProfitDropExit)
                 {
-                    ForcePosition(0, $"任務總損益低於{ruleSet.ExitOnTotalProfitDropExitPoints}點平倉", isFinishClose: true);
+                    ForcePosition(0, $"任務總損益自高點回落{ruleSet.ExitOnTotalProfitDropExitPoints}點平倉", isFinishClose: true);
                     SetFinished(true);
                     return;
                 }
@@ -762,35 +771,25 @@ namespace ZenPlatform.Strategy
                 var worstTotalInBar = PositionManager.PingProfit + (entry - bar.High);
                 var bestTotalInBar = PositionManager.PingProfit + (entry - bar.Low);
                 UpdateCoverLossArmed(worstTotalInBar, coverLossArmThreshold, ruleSet.CoverLossBeforeTakeProfit);
-                var requiredFloatForCoverLossExit = CoverLossExitTarget - PositionManager.PingProfit;
+                var requiredFloatForCoverLossExit = ruleSet.CoverLossMaxProfitCapEnabled
+                    ? Math.Max(1, ruleSet.CoverLossMaxProfitPoints)
+                    : coverLossExitTarget - PositionManager.PingProfit;
                 var coverLossExitPrice = requiredFloatForCoverLossExit <= 0m ? bar.Close : entry - requiredFloatForCoverLossExit;
                 var hitCoverLossExit = _coverLossArmed && ruleSet.CoverLossBeforeTakeProfit &&
                                        (requiredFloatForCoverLossExit <= 0m || bar.Low <= coverLossExitPrice);
-                if (totalProfitDropEnabled && !_totalProfitDropAfterTriggerArmed && bestTotalInBar > ruleSet.ExitOnTotalProfitDropTriggerPoints)
-                {
-                    _totalProfitDropAfterTriggerArmed = true;
-                    PutStr($"任務總損益超過{ruleSet.ExitOnTotalProfitDropTriggerPoints}點，若低於{ruleSet.ExitOnTotalProfitDropExitPoints}點將平倉...");
-                }
-                var requiredFloatForDropExit = ruleSet.ExitOnTotalProfitDropExitPoints - PositionManager.PingProfit;
-                var dropExitPrice = requiredFloatForDropExit <= 0m ? bar.Close : entry - requiredFloatForDropExit;
+                UpdateTotalProfitDropAfterTriggerArmed(bestTotalInBar, ruleSet);
                 var hitTotalProfitDropExit = totalProfitDropEnabled && _totalProfitDropAfterTriggerArmed &&
-                                             worstTotalInBar < ruleSet.ExitOnTotalProfitDropExitPoints;
+                                             worstTotalInBar <= _totalProfitDropAfterTriggerPeak - ruleSet.ExitOnTotalProfitDropExitPoints;
                 var riseArmThreshold = -Math.Abs((decimal)ruleSet.ExitOnTotalProfitRiseArmBelowPoints);
                 if (riseExitEnabled && !_riseFromDrawdownArmed && worstTotalInBar <= riseArmThreshold)
                 {
                     _riseFromDrawdownArmed = true;
-                    _minTotalProfitForRiseExit = worstTotalInBar;
-                    PutStr($"任務總損益低於-{ruleSet.ExitOnTotalProfitRiseArmBelowPoints}點，若拉回{ruleSet.ExitOnTotalProfitRisePoints}點將平倉...");
+                    PutStr($"任務總損益低於-{ruleSet.ExitOnTotalProfitRiseArmBelowPoints}點，等待浮動損益達{ruleSet.ExitOnTotalProfitRisePoints}點平倉...");
                 }
-                if (riseExitEnabled && _riseFromDrawdownArmed && worstTotalInBar < _minTotalProfitForRiseExit)
-                {
-                    _minTotalProfitForRiseExit = worstTotalInBar;
-                }
-                var requiredTotalForRiseExit = _minTotalProfitForRiseExit + ruleSet.ExitOnTotalProfitRisePoints;
-                var requiredFloatForRiseExit = requiredTotalForRiseExit - PositionManager.PingProfit;
-                var riseExitPrice = requiredFloatForRiseExit <= 0m ? bar.Close : entry - requiredFloatForRiseExit;
+                var requiredFloatForRiseExit = Math.Max(1, ruleSet.ExitOnTotalProfitRisePoints);
+                var riseExitPrice = entry - requiredFloatForRiseExit;
                 var hitRiseExit = riseExitEnabled && _riseFromDrawdownArmed &&
-                                  (requiredFloatForRiseExit <= 0m || bar.Low <= riseExitPrice);
+                                  bar.Low <= riseExitPrice;
                 var hitTotalTp = totalTakeProfit > 0 && (requiredFloatForTotalTp <= 0m || bar.Low <= totalTpPrice);
                 var hitFloatTp = floatTakeProfit > 0 && bar.Low <= floatTpPrice;
                 var hitTp = hitTotalTp || hitFloatTp;
@@ -817,14 +816,14 @@ namespace ZenPlatform.Strategy
 
                 if (hitRiseExit)
                 {
-                    ForcePosition(0, BuildRiseExitReason(ruleSet.ExitOnTotalProfitRiseArmBelowPoints, ruleSet.ExitOnTotalProfitRisePoints, _minTotalProfitForRiseExit), isFinishClose: true);
+                    ForcePosition(0, BuildRiseExitReason(ruleSet.ExitOnTotalProfitRiseArmBelowPoints, ruleSet.ExitOnTotalProfitRisePoints), isFinishClose: true);
                     SetFinished(true);
                     return;
                 }
 
                 if (hitTotalProfitDropExit)
                 {
-                    ForcePosition(0, $"任務總損益低於{ruleSet.ExitOnTotalProfitDropExitPoints}點平倉", isFinishClose: true);
+                    ForcePosition(0, $"任務總損益自高點回落{ruleSet.ExitOnTotalProfitDropExitPoints}點平倉", isFinishClose: true);
                     SetFinished(true);
                     return;
                 }
@@ -862,9 +861,21 @@ namespace ZenPlatform.Strategy
                 return false;
             }
 
+            var reasonPrefix = string.IsNullOrWhiteSpace(stopLossReason) ? "停損觸發" : stopLossReason;
+
             if (ReverseCount >= maxReverseCount)
             {
-                return false;
+                var limitReachedReason = $"{reasonPrefix}，已達最大反手次數({maxReverseCount})，平倉結束任務";
+                if (fillPrice.HasValue)
+                {
+                    ForcePositionAtPrice(0, fillPrice.Value, limitReachedReason, isFinishClose: true);
+                }
+                else
+                {
+                    ForcePosition(0, limitReachedReason, isFinishClose: true);
+                }
+                SetFinished(true);
+                return true;
             }
 
             var currentPosition = PositionManager.TotalKou;
@@ -876,7 +887,6 @@ namespace ZenPlatform.Strategy
             var nextReverseCount = ReverseCount + 1;
             var targetPosition = -currentPosition;
             var directionText = targetPosition > 0 ? "多" : "空";
-            var reasonPrefix = string.IsNullOrWhiteSpace(stopLossReason) ? "停損觸發" : stopLossReason;
             var reason = $"{reasonPrefix}，停損後反手做{directionText}({nextReverseCount}/{maxReverseCount})";
 
             if (fillPrice.HasValue)
@@ -1028,7 +1038,6 @@ namespace ZenPlatform.Strategy
                 ruleSet.ExitOnTotalProfitRisePoints <= 0)
             {
                 _riseFromDrawdownArmed = false;
-                _minTotalProfitForRiseExit = decimal.MaxValue;
                 return false;
             }
 
@@ -1037,8 +1046,7 @@ namespace ZenPlatform.Strategy
             if (!_riseFromDrawdownArmed && totalProfit <= armThreshold)
             {
                 _riseFromDrawdownArmed = true;
-                _minTotalProfitForRiseExit = totalProfit;
-                PutStr($"任務總損益低於-{ruleSet.ExitOnTotalProfitRiseArmBelowPoints}點，若拉回{ruleSet.ExitOnTotalProfitRisePoints}點將平倉...");
+                PutStr($"任務總損益低於-{ruleSet.ExitOnTotalProfitRiseArmBelowPoints}點，等待浮動損益達{ruleSet.ExitOnTotalProfitRisePoints}點平倉...");
                 return false;
             }
 
@@ -1047,25 +1055,20 @@ namespace ZenPlatform.Strategy
                 return false;
             }
 
-            if (_minTotalProfitForRiseExit == decimal.MaxValue || totalProfit < _minTotalProfitForRiseExit)
-            {
-                _minTotalProfitForRiseExit = totalProfit;
-            }
-
-            var rise = totalProfit - _minTotalProfitForRiseExit;
-            if (rise < ruleSet.ExitOnTotalProfitRisePoints)
+            var requiredFloatProfit = Math.Max(1, ruleSet.ExitOnTotalProfitRisePoints);
+            if (PositionManager.FloatProfit < requiredFloatProfit)
             {
                 return false;
             }
 
-            ForcePosition(0, BuildRiseExitReason(ruleSet.ExitOnTotalProfitRiseArmBelowPoints, ruleSet.ExitOnTotalProfitRisePoints, _minTotalProfitForRiseExit), isFinishClose: true);
+            ForcePosition(0, BuildRiseExitReason(ruleSet.ExitOnTotalProfitRiseArmBelowPoints, ruleSet.ExitOnTotalProfitRisePoints), isFinishClose: true);
             SetFinished(true);
             return true;
         }
 
-        private static string BuildRiseExitReason(int armBelowPoints, int risePoints, decimal minTotalProfit)
+        private static string BuildRiseExitReason(int armBelowPoints, int floatProfitPoints)
         {
-            return $"任務總損益曾低於-{armBelowPoints}點，已拉回{risePoints}點(最低{minTotalProfit:0.##})";
+            return $"任務總損益曾低於-{armBelowPoints}點，浮動損益已達{floatProfitPoints}點";
         }
 
         private bool CheckTotalProfitDropAfterTriggerExit()
@@ -1079,29 +1082,69 @@ namespace ZenPlatform.Strategy
             var ruleSet = manager.RuleSet;
             if (!ruleSet.ExitOnTotalProfitDropAfterTrigger ||
                 ruleSet.ExitOnTotalProfitDropTriggerPoints <= 0 ||
-                ruleSet.ExitOnTotalProfitDropExitPoints < 0 ||
-                ruleSet.ExitOnTotalProfitDropExitPoints >= ruleSet.ExitOnTotalProfitDropTriggerPoints)
+                ruleSet.ExitOnTotalProfitDropExitPoints < 0)
             {
                 _totalProfitDropAfterTriggerArmed = false;
+                _totalProfitDropAfterTriggerPeak = 0m;
                 return false;
             }
 
             var totalProfit = PositionManager.FloatProfit + PositionManager.PingProfit;
-            if (!_totalProfitDropAfterTriggerArmed && totalProfit > ruleSet.ExitOnTotalProfitDropTriggerPoints)
+            if (!_totalProfitDropAfterTriggerArmed && totalProfit >= ruleSet.ExitOnTotalProfitDropTriggerPoints)
             {
                 _totalProfitDropAfterTriggerArmed = true;
-                PutStr($"任務總損益超過{ruleSet.ExitOnTotalProfitDropTriggerPoints}點，若低於{ruleSet.ExitOnTotalProfitDropExitPoints}點將平倉...");
+                _totalProfitDropAfterTriggerPeak = totalProfit;
+                PutStr($"任務總損益超過{ruleSet.ExitOnTotalProfitDropTriggerPoints}點，等待自高點回落{ruleSet.ExitOnTotalProfitDropExitPoints}點平倉...");
                 return false;
             }
 
-            if (!_totalProfitDropAfterTriggerArmed || totalProfit >= ruleSet.ExitOnTotalProfitDropExitPoints)
+            if (!_totalProfitDropAfterTriggerArmed)
             {
                 return false;
             }
 
-            ForcePosition(0, $"任務總損益低於{ruleSet.ExitOnTotalProfitDropExitPoints}點平倉", isFinishClose: true);
+            if (totalProfit > _totalProfitDropAfterTriggerPeak)
+            {
+                _totalProfitDropAfterTriggerPeak = totalProfit;
+            }
+
+            var retraceThreshold = _totalProfitDropAfterTriggerPeak - ruleSet.ExitOnTotalProfitDropExitPoints;
+            if (totalProfit > retraceThreshold)
+            {
+                return false;
+            }
+
+            ForcePosition(0, $"任務總損益自高點回落{ruleSet.ExitOnTotalProfitDropExitPoints}點平倉", isFinishClose: true);
             SetFinished(true);
             return true;
+        }
+
+        private void UpdateTotalProfitDropAfterTriggerArmed(decimal bestTotalInBar, RuleSet ruleSet)
+        {
+            if (!ruleSet.ExitOnTotalProfitDropAfterTrigger ||
+                ruleSet.ExitOnTotalProfitDropTriggerPoints <= 0 ||
+                ruleSet.ExitOnTotalProfitDropExitPoints < 0)
+            {
+                _totalProfitDropAfterTriggerArmed = false;
+                _totalProfitDropAfterTriggerPeak = 0m;
+                return;
+            }
+
+            if (!_totalProfitDropAfterTriggerArmed)
+            {
+                if (bestTotalInBar >= ruleSet.ExitOnTotalProfitDropTriggerPoints)
+                {
+                    _totalProfitDropAfterTriggerArmed = true;
+                    _totalProfitDropAfterTriggerPeak = bestTotalInBar;
+                    PutStr($"任務總損益超過{ruleSet.ExitOnTotalProfitDropTriggerPoints}點，等待自高點回落{ruleSet.ExitOnTotalProfitDropExitPoints}點平倉...");
+                }
+                return;
+            }
+
+            if (bestTotalInBar > _totalProfitDropAfterTriggerPeak)
+            {
+                _totalProfitDropAfterTriggerPeak = bestTotalInBar;
+            }
         }
 
         private bool CheckCoverLossRecoveryExit()
@@ -1126,7 +1169,11 @@ namespace ZenPlatform.Strategy
                 return false;
             }
 
-            if (totalProfit >= CoverLossExitTarget)
+            var hitCoverLossRecovery = ruleSet.CoverLossMaxProfitCapEnabled
+                ? PositionManager.FloatProfit >= Math.Max(1, ruleSet.CoverLossMaxProfitPoints)
+                : totalProfit >= GetCoverLossRecoveryTarget(ruleSet);
+
+            if (hitCoverLossRecovery)
             {
                 ForcePosition(0, "獲利補足平倉", isFinishClose: true);
                 SetFinished(true);
@@ -1134,6 +1181,18 @@ namespace ZenPlatform.Strategy
             }
 
             return false;
+        }
+
+        private decimal GetCoverLossRecoveryTarget(RuleSet ruleSet)
+        {
+            var baseTarget = (TradeCount + 1) * 2m;
+            if (ruleSet.CoverLossMaxProfitCapEnabled)
+            {
+                var capTarget = Math.Max(1, ruleSet.CoverLossMaxProfitPoints);
+                return Math.Min(baseTarget, capTarget);
+            }
+
+            return baseTarget;
         }
 
         private void UpdateCoverLossArmed(decimal observedTotalProfit, decimal armThreshold, bool enabled)
@@ -1156,16 +1215,20 @@ namespace ZenPlatform.Strategy
             }
         }
 
-        private void TrackWorstTotalProfit()
+        private void TrackTotalProfitExtremes()
         {
             var totalProfit = TotalProfit;
-            if (totalProfit >= _worstTotalProfit)
+            if (totalProfit < _worstTotalProfit)
             {
-                return;
+                _worstTotalProfit = totalProfit;
+                OnPropertyChanged(nameof(MaxTotalLoss));
             }
 
-            _worstTotalProfit = totalProfit;
-            OnPropertyChanged(nameof(MaxTotalLoss));
+            if (totalProfit > _bestTotalProfit)
+            {
+                _bestTotalProfit = totalProfit;
+                OnPropertyChanged(nameof(MaxProfit));
+            }
         }
 
         internal bool TryAutoStopLossByFiveMinuteKBar(KBar bar, ZenPlatform.SessionManager.SessionManager manager)
@@ -1265,8 +1328,13 @@ namespace ZenPlatform.Strategy
                     }
                 }
 
+                // 保底：若無法由指標/歷史推得有效 A，使用現價上方最近 100 整點。
+                if (_entryRangeBoundA <= 0m)
+                {
+                    _entryRangeBoundA = RoundUpToNextHundred(currentPrice);
+                }
                 // 空單停損基準線若仍低於現價，改為現價上方最近的 100 整點。
-                if (_entryRangeBoundA > 0m && _entryRangeBoundA < currentPrice)
+                else if (_entryRangeBoundA < currentPrice)
                 {
                     _entryRangeBoundA = RoundUpToNextHundred(currentPrice);
                 }
@@ -1283,8 +1351,13 @@ namespace ZenPlatform.Strategy
                     }
                 }
 
+                // 保底：若無法由指標/歷史推得有效 V，使用現價下方最近 100 整點。
+                if (_entryRangeBoundV <= 0m)
+                {
+                    _entryRangeBoundV = RoundDownToHundred(currentPrice);
+                }
                 // 多單停損基準線若仍高於現價，改為現價下方最近的 100 整點。
-                if (_entryRangeBoundV > currentPrice)
+                else if (_entryRangeBoundV > currentPrice)
                 {
                     _entryRangeBoundV = RoundDownToHundred(currentPrice);
                 }
@@ -1575,7 +1648,18 @@ namespace ZenPlatform.Strategy
 
         public override void OnMinute()
         {
-            // Default session has no per-minute behavior.
+            if (IsFinished)
+            {
+                return;
+            }
+
+            var manager = Manager;
+            if (manager == null)
+            {
+                return;
+            }
+
+            _ = TryCloseBeforeLongHolidayExit(manager);
         }
 
 

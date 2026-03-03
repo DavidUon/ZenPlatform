@@ -232,12 +232,16 @@
                 </Grid.RowDefinitions>
 
                 <Grid Grid.Row="0">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
 
-                    <StackPanel Grid.Column="0" Orientation="Horizontal">
+                    <StackPanel Grid.Row="0" Grid.Column="0" Orientation="Horizontal">
                         <TextBlock VerticalAlignment="Center" Margin="0,0,8,0" FontSize="15" Text="開始日期"/>
                         <Border Width="120" Height="28"
                                 Background="{StaticResource InputBackgroundBrush}"
@@ -267,7 +271,10 @@
                             <ComboBoxItem Content="13:45"/>
                             <ComboBoxItem Content="15:00"/>
                         </ComboBox>
-                        <TextBlock VerticalAlignment="Center" Margin="16,0,8,0" FontSize="15" Text="結束日期"/>
+                    </StackPanel>
+
+                    <StackPanel Grid.Row="1" Grid.Column="0" Orientation="Horizontal" Margin="0,8,0,0">
+                        <TextBlock VerticalAlignment="Center" Margin="0,0,8,0" FontSize="15" Text="結束日期"/>
                         <Border Width="120" Height="28"
                                 Background="{StaticResource InputBackgroundBrush}"
                                 BorderBrush="{StaticResource InputBorderBrush}"
@@ -301,14 +308,20 @@
                                  TextAlignment="Center" VerticalContentAlignment="Center"
                                  Style="{StaticResource InputTextBoxStyle}" />
                         <TextBlock VerticalAlignment="Center" Margin="6,0,0,0" FontSize="15" Text="天"/>
+                    </StackPanel>
+
+                    <StackPanel Grid.Row="0" Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right">
                         <TextBlock VerticalAlignment="Center" Margin="16,0,8,0" FontSize="15" Text="回測商品"/>
-                        <ComboBox x:Name="BacktestProductCombo" MinWidth="120" Margin="0,0,8,0"
+                        <ComboBox x:Name="BacktestProductCombo" MinWidth="140" Margin="0,0,8,0"
                                   SelectedIndex="0"
                                   Style="{StaticResource InputComboBoxStyle}">
                             <ComboBoxItem Content="大型台指" Tag="1"/>
                             <ComboBoxItem Content="小型台指" Tag="2"/>
                             <ComboBoxItem Content="微型台指" Tag="3"/>
                         </ComboBox>
+                    </StackPanel>
+
+                    <StackPanel Grid.Row="1" Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,8,0,0">
                         <TextBlock VerticalAlignment="Center" Margin="16,0,8,0" FontSize="15" Text="回測精度"/>
                         <ComboBox x:Name="BacktestPrecisionCombo" MinWidth="140" Margin="0,0,8,0"
                                   SelectedIndex="0"
@@ -318,7 +331,6 @@
                             <ComboBoxItem Content="超高速回測" Tag="6"/>
                         </ComboBox>
                     </StackPanel>
-
                 </Grid>
 
             </Grid>

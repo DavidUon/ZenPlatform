@@ -55,6 +55,8 @@ namespace ZenPlatform.Strategy
         public bool ReverseAfterStopLoss { get; set; } = true;
         public bool CoverLossBeforeTakeProfit { get; set; } = false;
         public int CoverLossTriggerPoints { get; set; } = 150;
+        public bool CoverLossMaxProfitCapEnabled { get; set; } = false;
+        public int CoverLossMaxProfitPoints { get; set; } = 500;
         public bool ExitOnTotalProfitRise { get; set; } = false;
         public int ExitOnTotalProfitRiseArmBelowPoints { get; set; } = 100;
         public int ExitOnTotalProfitRisePoints { get; set; } = 500;
@@ -82,5 +84,6 @@ namespace ZenPlatform.Strategy
         public System.TimeSpan NightCloseBeforeTime { get; set; } = new System.TimeSpan(4, 50, 0);
         public bool CloseBeforeLongHoliday { get; set; } = false;
         public System.TimeSpan CloseBeforeLongHolidayTime { get; set; } = new System.TimeSpan(4, 50, 0);
+        public bool CloseBeforeLongHolidayExcludeWeekends { get; set; } = false;
     }
 }

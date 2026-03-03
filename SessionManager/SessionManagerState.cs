@@ -29,6 +29,7 @@ namespace ZenPlatform.SessionManager
         public decimal AvgEntryPrice { get; set; }
         public decimal FloatProfit { get; set; }
         public decimal RealizedProfit { get; set; }
+        public decimal BestTotalProfit { get; set; }
         public decimal WorstTotalProfit { get; set; }
         public int TradeCount { get; set; }
         public int ReverseCount { get; set; }
@@ -50,6 +51,7 @@ namespace ZenPlatform.SessionManager
                 AvgEntryPrice = session.AvgEntryPrice,
                 FloatProfit = session.FloatProfit,
                 RealizedProfit = session.RealizedProfit,
+                BestTotalProfit = session.BestTotalProfit,
                 WorstTotalProfit = session.WorstTotalProfit,
                 TradeCount = session.TradeCount,
                 ReverseCount = session.ReverseCount,
@@ -81,6 +83,7 @@ namespace ZenPlatform.SessionManager
                 FloatProfit = FloatProfit
             });
             session.RestoreAutoStopSnapshot(HasAutoStopSnapshot, EntryRangeBoundA, EntryRangeBoundV);
+            session.RestoreBestTotalProfit(BestTotalProfit);
             session.RestoreWorstTotalProfit(WorstTotalProfit);
             session.RestoreFailed(IsFailed);
             session.RestoreFinished(IsFinished);

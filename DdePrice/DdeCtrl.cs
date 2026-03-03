@@ -24,11 +24,10 @@ namespace ZenPlatform.DdePrice
             {
                 if (_idInst == IntPtr.Zero)
                 {
-                    DdeApi.DdeInitialize(out _idInst, _ddeCallback, DdeApi.APPCMD_CLIENTONLY, 0);
-                    if (_idInst == IntPtr.Zero)
+                    var initError = DdeApi.DdeInitialize(out _idInst, _ddeCallback, DdeApi.APPCMD_CLIENTONLY, 0);
+                    if (initError != DdeApi.DMLERR_NO_ERROR || _idInst == IntPtr.Zero)
                     {
-                        var lastError = DdeApi.DdeGetLastError(IntPtr.Zero);
-                        throw new DdeException(DdeErrCode.初始化失敗, lastError);
+                        throw new DdeException(DdeErrCode.初始化失敗, initError);
                     }
                 }
             }
@@ -94,7 +93,7 @@ namespace ZenPlatform.DdePrice
             IntPtr hszItem = DdeApi.DdeCreateStringHandle(_idInst, item, DdeApi.CP_ACP);
             try
             {
-                uint result = 0;
+                uint result;
                 IntPtr hData = DdeApi.DdeClientTransaction(
                     IntPtr.Zero,
                     0,
@@ -105,7 +104,7 @@ namespace ZenPlatform.DdePrice
                     timeout,
                     out result);
 
-                if (hData == IntPtr.Zero || result != DdeApi.DMLERR_NO_ERROR)
+                if (hData == IntPtr.Zero)
                 {
                     var lastError = DdeApi.DdeGetLastError(_idInst);
                     throw new DdeException(DdeErrCode.DDE交易失敗, lastError);
@@ -146,7 +145,7 @@ namespace ZenPlatform.DdePrice
                     hConv,
                     hszItem,
                     fmt,
-                    DdeApi.XTYP_ADVSTART | DdeApi.XTYPF_ACKREQ,
+                    DdeApi.XTYP_ADVSTART,
                     DdeApi.TIMEOUT_SYNC,
                     out result);
 

@@ -73,7 +73,17 @@ namespace ZenPlatform.Strategy
             }
 
             var time = now.TimeOfDay;
-            if (time >= NightSessionEnd || time < ruleSet.CloseBeforeLongHolidayTime)
+            if (time >= NightSessionEnd)
+            {
+                return false;
+            }
+
+            var currentMinute = new TimeSpan(time.Hours, time.Minutes, 0);
+            var triggerMinute = new TimeSpan(
+                ruleSet.CloseBeforeLongHolidayTime.Hours,
+                ruleSet.CloseBeforeLongHolidayTime.Minutes,
+                0);
+            if (currentMinute != triggerMinute)
             {
                 return false;
             }
@@ -85,7 +95,16 @@ namespace ZenPlatform.Strategy
                 return false;
             }
 
-            return CountConsecutiveClosedDaysAfter(tradingDate) >= minClosedDays;
+            var closedDays = CountConsecutiveClosedDaysAfter(tradingDate);
+            if (ruleSet.CloseBeforeLongHolidayExcludeWeekends)
+            {
+                if (IsNormalWeekendOnlyBreak(tradingDate, closedDays))
+                {
+                    return false;
+                }
+            }
+
+            return closedDays >= minClosedDays;
         }
 
         internal static DateTime ResolveTradingDate(DateTime now)
@@ -109,6 +128,19 @@ namespace ZenPlatform.Strategy
             }
 
             return closedDays;
+        }
+
+        internal static bool IsNormalWeekendOnlyBreak(DateTime tradingDate, int closedDays)
+        {
+            if (closedDays != 2)
+            {
+                return false;
+            }
+
+            var first = tradingDate.Date.AddDays(1);
+            var second = tradingDate.Date.AddDays(2);
+            return first.DayOfWeek == DayOfWeek.Saturday &&
+                   second.DayOfWeek == DayOfWeek.Sunday;
         }
 
         internal static bool IsTradingDay(DateTime date)

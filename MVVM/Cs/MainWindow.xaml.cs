@@ -1026,7 +1026,7 @@ namespace ZenPlatform
 				var account = permission?.Account ?? "---";
 				var branch = permission?.BranchName ?? "---";
 				var accountText = account == "---" ? account : $"({branch}){account}";
-				var password = permission?.BrokerPassword ?? "---";
+				var hasBrokerPassword = !string.IsNullOrWhiteSpace(permission?.BrokerPassword);
 				var permissionText = permission == null
 					? "尚未購買"
 					: permission.UnlimitedPermission ? "無口數限制" : $"{permission.PermissionCount} 口微型台指";
@@ -1039,7 +1039,7 @@ namespace ZenPlatform
 				var userName = user?.Name ?? "";
 				var userId = user?.Id ?? "";
 				var message = $"身分證字號：{userId}\n期貨帳號：{accountText}\n{_core.ProgramName} 權限：{permissionText}\n到期日：{expireText}";
-				if (InfoWindow.Show(this, "使用者資訊", userName, message, canChangePassword, true, out var logoutRequested, out var modifyRequested, out var changePasswordRequested))
+				if (InfoWindow.Show(this, "使用者資訊", userName, message, canChangePassword, hasBrokerPassword, true, out var logoutRequested, out var modifyRequested, out var changePasswordRequested))
 				{
 					if (logoutRequested)
 					{

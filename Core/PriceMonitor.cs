@@ -19,16 +19,8 @@ namespace ZenPlatform.Core
         private readonly Func<bool> _isDdeConnected;
         private readonly Action _requestResubscribe;
         private readonly TimeSpan _stallThreshold = TimeSpan.FromMinutes(5);
+        private readonly QuoteFlowGuard _flowGuard = new();
 
-        private string? _lastBid;
-        private string? _lastAsk;
-        private string? _lastLast;
-        private bool _hasBid;
-        private bool _hasAsk;
-        private bool _hasLast;
-        private DateTime? _lastChangeAt;
-        private DateTime? _lastDdeAt;
-        private DateTime? _lastNetworkAt;
         private bool _stalledRaised;
         private bool _autoSwitchRaised;
         private bool _ddeDisconnectPending;
@@ -75,46 +67,21 @@ namespace ZenPlatform.Core
                 return;
             }
 
-            if (quote.Source == QuoteSource.Dde)
+            var changed = _flowGuard.TrackQuote(quote, _timeCtrl.ExchangeTime);
+            if (!changed)
             {
-                _lastDdeAt = _timeCtrl.ExchangeTime;
-            }
-            else if (quote.Source == QuoteSource.Network)
-            {
-                _lastNetworkAt = _timeCtrl.ExchangeTime;
+                return;
             }
 
-            switch (quote.Field)
+            _stalledRaised = false;
+            _autoSwitchRaised = false;
+            if (_isDdeConnected())
             {
-                case QuoteField.Bid:
-                    UpdateField(ref _lastBid, ref _hasBid, quote.Value);
-                    break;
-                case QuoteField.Ask:
-                    UpdateField(ref _lastAsk, ref _hasAsk, quote.Value);
-                    break;
-                case QuoteField.Last:
-                    UpdateField(ref _lastLast, ref _hasLast, quote.Value);
-                    break;
+                _priceManager.SetTemporaryNetworkFallback(false);
+                _ddeDisconnectPending = false;
+                _ddeDisconnectedAt = null;
             }
-        }
-
-        private void UpdateField(ref string? lastValue, ref bool hasValue, string value)
-        {
-            if (!hasValue || !string.Equals(lastValue, value, StringComparison.Ordinal))
-            {
-                lastValue = value;
-                hasValue = true;
-                _lastChangeAt = _timeCtrl.ExchangeTime;
-                _stalledRaised = false;
-                _autoSwitchRaised = false;
-                if (_isDdeConnected())
-                {
-                    _priceManager.SetTemporaryNetworkFallback(false);
-                    _ddeDisconnectPending = false;
-                    _ddeDisconnectedAt = null;
-                }
-                PriceFlowResumed?.Invoke();
-            }
+            PriceFlowResumed?.Invoke();
         }
 
         public void HandleDdeDisconnected()
@@ -137,7 +104,7 @@ namespace ZenPlatform.Core
                 return;
             }
 
-            if (!_hasBid || !_hasAsk || !_hasLast || _lastChangeAt == null)
+            if (!_flowGuard.HasRequiredFields || _flowGuard.LastChangeAt == null)
             {
                 return;
             }
@@ -156,15 +123,15 @@ namespace ZenPlatform.Core
                     _autoSwitchRaised = true;
                     _ddeDisconnectPending = false;
                     AutoSwitchedToNetwork?.Invoke(new PriceStallInfo(
-                        _lastChangeAt.Value,
-                        _lastDdeAt,
-                        _lastNetworkAt,
+                        _flowGuard.LastChangeAt!.Value,
+                        _flowGuard.LastDdeAt,
+                        _flowGuard.LastNetworkAt,
                         _priceManager.CurrentSource,
                         _priceManager.Mode));
                 }
             }
 
-            if (now - _lastChangeAt.Value < _stallThreshold)
+            if (!_flowGuard.IsStale(now, _stallThreshold))
             {
                 return;
             }
@@ -177,12 +144,12 @@ namespace ZenPlatform.Core
                     _priceManager.SetTemporaryNetworkFallback(true);
                     _requestResubscribe();
                     AutoSwitchedToNetwork?.Invoke(new PriceStallInfo(
-                        _lastChangeAt.Value,
-                        _lastDdeAt,
-                        _lastNetworkAt,
+                        _flowGuard.LastChangeAt!.Value,
+                        _flowGuard.LastDdeAt,
+                        _flowGuard.LastNetworkAt,
                         _priceManager.CurrentSource,
                         _priceManager.Mode));
-                    _lastChangeAt = now;
+                    _flowGuard.MarkSyntheticChange(now);
                     _stalledRaised = false;
                 }
                 return;
@@ -199,9 +166,9 @@ namespace ZenPlatform.Core
                 _requestResubscribe();
             }
             PriceStalled?.Invoke(new PriceStallInfo(
-                _lastChangeAt.Value,
-                _lastDdeAt,
-                _lastNetworkAt,
+                _flowGuard.LastChangeAt!.Value,
+                _flowGuard.LastDdeAt,
+                _flowGuard.LastNetworkAt,
                 _priceManager.CurrentSource,
                 _priceManager.Mode));
         }

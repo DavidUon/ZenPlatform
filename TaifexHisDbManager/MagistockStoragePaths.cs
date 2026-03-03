@@ -8,13 +8,12 @@ namespace TaifexHisDbManager
         private static string _rootFolder = LoadRootFolder();
         private const string CalendarFileName = "台灣國定假日定義.txt";
 
-        // 統一 Magistock 資料庫根路徑（供歷史/回測/行事曆等使用）
-        public static string MagistockLibPath => _rootFolder;
+        // 匯入的歷史價格資料庫位置（歷史價格資料庫.YYYY.db）
+        public static string MagistockLibPath => Path.Combine(_rootFolder, "回測歷史資料庫");
         public static string RootFolder => _rootFolder;
         public static string CalendarFolder => Path.Combine(_rootFolder, "行事曆");
         public static string TradingCalendarPath => Path.Combine(CalendarFolder, CalendarFileName);
         public static string DownloadZipFolder => Path.Combine(_rootFolder, "期貨交易所下載Zip");
-        public static string BacktestDbFolder => Path.Combine(_rootFolder, "回測資料庫");
         public static string BacktestReportFolder => Path.Combine(_rootFolder, "台指二號回測報表");
         public static string ImportedFolder => Path.Combine(DownloadZipFolder, "已匯入");
         public static string CsvTempFolder => Path.Combine(DownloadZipFolder, "_CsvTemp");
@@ -28,8 +27,9 @@ namespace TaifexHisDbManager
         public static void EnsureFolders()
         {
             Directory.CreateDirectory(_rootFolder);
+            Directory.CreateDirectory(MagistockLibPath);
+            MigrateLegacyHistoryFiles();
             Directory.CreateDirectory(CalendarFolder);
-            Directory.CreateDirectory(BacktestDbFolder);
             Directory.CreateDirectory(BacktestReportFolder);
         }
 
@@ -55,6 +55,35 @@ namespace TaifexHisDbManager
             }
 
             return Path.Combine(installParent, "Magistock資料庫");
+        }
+
+        private static void MigrateLegacyHistoryFiles()
+        {
+            try
+            {
+                // 舊版把歷史資料庫檔案放在根目錄，啟動時自動搬移到新資料夾。
+                foreach (var file in Directory.GetFiles(_rootFolder, "*", SearchOption.TopDirectoryOnly))
+                {
+                    var extension = Path.GetExtension(file);
+                    if (!string.Equals(extension, ".db", StringComparison.OrdinalIgnoreCase) &&
+                        !string.Equals(extension, ".json", StringComparison.OrdinalIgnoreCase))
+                    {
+                        continue;
+                    }
+
+                    var destination = Path.Combine(MagistockLibPath, Path.GetFileName(file));
+                    if (string.Equals(file, destination, StringComparison.OrdinalIgnoreCase))
+                    {
+                        continue;
+                    }
+
+                    File.Move(file, destination, overwrite: true);
+                }
+            }
+            catch
+            {
+                // best effort: 避免遷移失敗阻斷啟動流程
+            }
         }
 
         private static void EnsureTradingCalendarFile()

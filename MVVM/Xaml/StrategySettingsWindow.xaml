@@ -173,25 +173,42 @@
                                         VerticalAlignment="Center">
                                     <Image Source="/MVVM/Assets/question.png" Stretch="Uniform" />
                                 </Button>
-                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                    <TextBlock Text="新任務阻擋" Width="90" VerticalAlignment="Center" />
+                                <Grid VerticalAlignment="Center">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="90" />
+                                        <ColumnDefinition Width="50" />
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="50" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                    </Grid.RowDefinitions>
+
+                                    <TextBlock Grid.Row="0" Grid.Column="0" Text="新任務阻擋" VerticalAlignment="Center" />
                                     <TextBox x:Name="SameDirectionBlockMinutesBox"
+                                             Grid.Row="0"
+                                             Grid.Column="1"
                                              Background="{StaticResource BrushInputBackground}"
                                              Foreground="{StaticResource BrushText}"
                                              BorderBrush="{StaticResource BrushInputBorder}"
                                              TextAlignment="Center"
                                              Width="50"
                                              HorizontalAlignment="Left" />
-                                    <TextBlock Text="分鐘內" Margin="8,0,8,0" VerticalAlignment="Center" />
+                                    <TextBlock Grid.Row="0" Grid.Column="2" Text="分鐘內" Margin="8,0,8,0" VerticalAlignment="Center" />
                                     <TextBox x:Name="SameDirectionBlockRangeBox"
+                                             Grid.Row="0"
+                                             Grid.Column="3"
                                              Background="{StaticResource BrushInputBackground}"
                                              Foreground="{StaticResource BrushText}"
                                              BorderBrush="{StaticResource BrushInputBorder}"
                                              TextAlignment="Center"
                                              Width="50"
                                              HorizontalAlignment="Left" />
-                                    <TextBlock Text="上下點範圍內不建立同方向任務" Margin="8,0,0,0" VerticalAlignment="Center" />
-                                </StackPanel>
+                                    <TextBlock Grid.Row="0" Grid.Column="4" Text="上下點範圍內" Margin="8,0,0,0" VerticalAlignment="Center" />
+                                    <TextBlock Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="4" Text="不建立同方向任務" Margin="0,2,0,0" VerticalAlignment="Center" />
+                                </Grid>
                             </DockPanel>
 
                             <DockPanel Margin="0,0,0,6">
@@ -345,6 +362,16 @@
                             </DockPanel>
 
                             <DockPanel Margin="0,0,0,6">
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                    <TextBlock Text="" Width="24" VerticalAlignment="Center" />
+                                    <CheckBox x:Name="CloseBeforeLongHolidayExcludeWeekendsCheckBox"
+                                              Margin="0,0,8,0"
+                                              VerticalAlignment="Center" />
+                                    <TextBlock Text="正常週休二日除外" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </DockPanel>
+
+                            <DockPanel Margin="0,0,0,6">
                                 <Button DockPanel.Dock="Right"
                                         Width="18"
                                         Height="18"
@@ -478,6 +505,24 @@
                                     <TextBlock Text="點後，獲利補足平倉" Margin="8,0,0,0" VerticalAlignment="Center" />
                                 </StackPanel>
                             </DockPanel>
+                            <DockPanel Margin="30,0,0,6">
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                    <CheckBox x:Name="CoverLossMaxProfitCapEnabledCheckBox"
+                                              Margin="0,0,8,0"
+                                              VerticalAlignment="Center"
+                                              Checked="OnTakeProfitModeChanged"
+                                              Unchecked="OnTakeProfitModeChanged" />
+                                    <TextBlock Text="最多不超過" Margin="0,0,8,0" VerticalAlignment="Center" />
+                                    <TextBox x:Name="CoverLossMaxProfitPointsBox"
+                                             Background="{StaticResource BrushInputBackground}"
+                                             Foreground="{StaticResource BrushText}"
+                                             BorderBrush="{StaticResource BrushInputBorder}"
+                                             TextAlignment="Center"
+                                             Width="50"
+                                             HorizontalAlignment="Left" />
+                                    <TextBlock Text="點" Margin="8,0,0,0" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </DockPanel>
 
                             <DockPanel Margin="0,0,0,6">
                                 <Button DockPanel.Dock="Right"
@@ -495,7 +540,7 @@
                                               VerticalAlignment="Center"
                                               Checked="OnTakeProfitModeChanged"
                                               Unchecked="OnTakeProfitModeChanged" />
-                                    <TextBlock Text="任務總損益低於" Margin="0,0,8,0" VerticalAlignment="Center" />
+                                    <TextBlock Text="任務虧損超過" Margin="0,0,8,0" VerticalAlignment="Center" />
                                     <TextBox x:Name="ExitOnTotalProfitRiseArmBelowPointsBox"
                                              Background="{StaticResource BrushInputBackground}"
                                              Foreground="{StaticResource BrushText}"
@@ -503,7 +548,7 @@
                                              TextAlignment="Center"
                                              Width="50"
                                              HorizontalAlignment="Left" />
-                                    <TextBlock Text="點後，拉回" Margin="8,0,8,0" VerticalAlignment="Center" />
+                                    <TextBlock Text="點後，浮動獲利達" Margin="8,0,8,0" VerticalAlignment="Center" />
                                     <TextBox x:Name="ExitOnTotalProfitRisePointsBox"
                                              Background="{StaticResource BrushInputBackground}"
                                              Foreground="{StaticResource BrushText}"
@@ -511,7 +556,7 @@
                                              TextAlignment="Center"
                                              Width="50"
                                              HorizontalAlignment="Left" />
-                                    <TextBlock Text="點後平倉" Margin="8,0,0,0" VerticalAlignment="Center" />
+                                    <TextBlock Text="後平倉" Margin="8,0,0,0" VerticalAlignment="Center" />
                                 </StackPanel>
                             </DockPanel>
 
@@ -531,7 +576,7 @@
                                               VerticalAlignment="Center"
                                               Checked="OnTakeProfitModeChanged"
                                               Unchecked="OnTakeProfitModeChanged" />
-                                    <TextBlock Text="任務總損益超過" Margin="0,0,8,0" VerticalAlignment="Center" />
+                                    <TextBlock Text="任務總獲利超過" Margin="0,0,8,0" VerticalAlignment="Center" />
                                     <TextBox x:Name="ExitOnTotalProfitDropTriggerPointsBox"
                                              Background="{StaticResource BrushInputBackground}"
                                              Foreground="{StaticResource BrushText}"
@@ -539,7 +584,7 @@
                                              TextAlignment="Center"
                                              Width="50"
                                              HorizontalAlignment="Left" />
-                                    <TextBlock Text="點後，低於" Margin="8,0,8,0" VerticalAlignment="Center" />
+                                    <TextBlock Text="後，自高點回落" Margin="8,0,8,0" VerticalAlignment="Center" />
                                     <TextBox x:Name="ExitOnTotalProfitDropExitPointsBox"
                                              Background="{StaticResource BrushInputBackground}"
                                              Foreground="{StaticResource BrushText}"
@@ -567,7 +612,7 @@
                                               VerticalAlignment="Center"
                                               Checked="OnTakeProfitModeChanged"
                                               Unchecked="OnTakeProfitModeChanged" />
-                                    <TextBlock Text="獲利超過" Margin="0,0,8,0" VerticalAlignment="Center" />
+                                    <TextBlock Text="總獲利超過" Margin="0,0,8,0" VerticalAlignment="Center" />
                                     <TextBox x:Name="ProfitRetraceTriggerPointsBox"
                                              Background="{StaticResource BrushInputBackground}"
                                              Foreground="{StaticResource BrushText}"
@@ -768,8 +813,8 @@
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
-                <Button Grid.Column="1" Content="確定" Width="90" Margin="0,0,12,0" Click="OnOkClick" />
-                <Button Grid.Column="2" Content="取消" Width="90" Click="OnCancelClick" />
+                <Button Grid.Column="1" Content="取消" Width="90" Margin="0,0,12,0" Click="OnCancelClick" />
+                <Button Grid.Column="2" Content="確定" Width="90" Click="OnOkClick" />
             </Grid>
         </Grid>
     </Border>

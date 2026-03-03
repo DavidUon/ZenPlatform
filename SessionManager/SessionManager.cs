@@ -125,6 +125,9 @@ namespace ZenPlatform.SessionManager
         public decimal? CurPrice { get; private set; }
         public int? Volume { get; private set; }
         public DateTime? LastQuoteTime { get; private set; }
+        private string _lastQuoteProduct = string.Empty;
+        private int _lastQuoteYear;
+        private int _lastQuoteMonth;
         private bool _backtestPriceReady;
         private decimal? _lastBacktestProcessedPrice;
         private bool _pendingLogReset;
@@ -136,6 +139,20 @@ namespace ZenPlatform.SessionManager
         private const string IndicatorPendingText = "(計算中....)";
         private const int BbiBollPeriodMinutes = 10;
         private const int MacdTriggerPeriodMinutes = 5;
+        private static readonly TimeSpan BacktestRolloverOpenTime = new(15, 0, 0);
+        private static readonly TimeSpan BacktestRolloverScheduleTime = new(13, 29, 0);
+        private PendingBacktestRollover? _pendingBacktestRollover;
+
+        private sealed class PendingBacktestRollover
+        {
+            public DateTime TriggerTime { get; init; }
+            public string Product { get; init; } = string.Empty;
+            public int CurrentYear { get; init; }
+            public int CurrentMonth { get; init; }
+            public int NextYear { get; init; }
+            public int NextMonth { get; init; }
+            public decimal CloseFill { get; init; }
+        }
 
         public bool IsStrategyRunning
         {
@@ -249,7 +266,9 @@ namespace ZenPlatform.SessionManager
                     MaxSessionCount = RuleSet.MaxSessionCount,
                     ReverseAfterStopLoss = RuleSet.ReverseAfterStopLoss,
                     CoverLossBeforeTakeProfit = RuleSet.CoverLossBeforeTakeProfit,
+                    CoverLossMaxProfitCapEnabled = RuleSet.CoverLossMaxProfitCapEnabled,
                     CoverLossTriggerPoints = RuleSet.CoverLossTriggerPoints,
+                    CoverLossMaxProfitPoints = RuleSet.CoverLossMaxProfitPoints,
                     ExitOnTotalProfitRise = RuleSet.ExitOnTotalProfitRise,
                     ExitOnTotalProfitRiseArmBelowPoints = RuleSet.ExitOnTotalProfitRiseArmBelowPoints,
                     ExitOnTotalProfitRisePoints = RuleSet.ExitOnTotalProfitRisePoints,
@@ -266,7 +285,8 @@ namespace ZenPlatform.SessionManager
                     DayCloseBeforeTime = RuleSet.DayCloseBeforeTime,
                     NightCloseBeforeTime = RuleSet.NightCloseBeforeTime,
                     CloseBeforeLongHoliday = RuleSet.CloseBeforeLongHoliday,
-                    CloseBeforeLongHolidayTime = RuleSet.CloseBeforeLongHolidayTime
+                    CloseBeforeLongHolidayTime = RuleSet.CloseBeforeLongHolidayTime,
+                    CloseBeforeLongHolidayExcludeWeekends = RuleSet.CloseBeforeLongHolidayExcludeWeekends
                 }
             };
 
@@ -324,7 +344,9 @@ namespace ZenPlatform.SessionManager
             RuleSet.MaxSessionCount = state.RuleSet?.MaxSessionCount ?? RuleSet.MaxSessionCount;
             RuleSet.ReverseAfterStopLoss = state.RuleSet?.ReverseAfterStopLoss ?? RuleSet.ReverseAfterStopLoss;
             RuleSet.CoverLossBeforeTakeProfit = state.RuleSet?.CoverLossBeforeTakeProfit ?? RuleSet.CoverLossBeforeTakeProfit;
+            RuleSet.CoverLossMaxProfitCapEnabled = state.RuleSet?.CoverLossMaxProfitCapEnabled ?? RuleSet.CoverLossMaxProfitCapEnabled;
             RuleSet.CoverLossTriggerPoints = state.RuleSet?.CoverLossTriggerPoints ?? RuleSet.CoverLossTriggerPoints;
+            RuleSet.CoverLossMaxProfitPoints = state.RuleSet?.CoverLossMaxProfitPoints ?? RuleSet.CoverLossMaxProfitPoints;
             RuleSet.ExitOnTotalProfitRise = state.RuleSet?.ExitOnTotalProfitRise ?? RuleSet.ExitOnTotalProfitRise;
             RuleSet.ExitOnTotalProfitRiseArmBelowPoints = state.RuleSet?.ExitOnTotalProfitRiseArmBelowPoints ?? RuleSet.ExitOnTotalProfitRiseArmBelowPoints;
             RuleSet.ExitOnTotalProfitRisePoints = state.RuleSet?.ExitOnTotalProfitRisePoints ?? RuleSet.ExitOnTotalProfitRisePoints;
@@ -348,6 +370,7 @@ namespace ZenPlatform.SessionManager
             RuleSet.NightCloseBeforeTime = state.RuleSet?.NightCloseBeforeTime ?? RuleSet.NightCloseBeforeTime;
             RuleSet.CloseBeforeLongHoliday = state.RuleSet?.CloseBeforeLongHoliday ?? RuleSet.CloseBeforeLongHoliday;
             RuleSet.CloseBeforeLongHolidayTime = state.RuleSet?.CloseBeforeLongHolidayTime ?? RuleSet.CloseBeforeLongHolidayTime;
+            RuleSet.CloseBeforeLongHolidayExcludeWeekends = state.RuleSet?.CloseBeforeLongHolidayExcludeWeekends ?? RuleSet.CloseBeforeLongHolidayExcludeWeekends;
             RuntimeState.CopyFrom(state.RuntimeState);
             _isRealTrade = state.IsRealTrade;
             _isStrategyRunning = state.IsStrategyRunning;
@@ -540,6 +563,18 @@ namespace ZenPlatform.SessionManager
             }
 
             LastQuoteTime = quote.Time;
+            if (!string.IsNullOrWhiteSpace(quote.Product))
+            {
+                _lastQuoteProduct = quote.Product;
+            }
+            if (quote.Year > 0)
+            {
+                _lastQuoteYear = quote.Year;
+            }
+            if (quote.Month > 0)
+            {
+                _lastQuoteMonth = quote.Month;
+            }
 
             if (IsBacktestActive && !isLastUpdate)
             {
@@ -559,6 +594,16 @@ namespace ZenPlatform.SessionManager
                 }
 
                 _lastBacktestProcessedPrice = CurPrice.Value;
+            }
+
+            if (TryCompleteBacktestPendingRollover(quote))
+            {
+                CompactActiveSessions();
+            }
+
+            if (IsBacktestRolloverPending())
+            {
+                return;
             }
 
             Entry.OnTick();
@@ -606,13 +651,21 @@ namespace ZenPlatform.SessionManager
             CurPrice = null;
             Volume = null;
             LastQuoteTime = null;
+            _lastQuoteProduct = string.Empty;
+            _lastQuoteYear = 0;
+            _lastQuoteMonth = 0;
             _backtestPriceReady = false;
             _lastBacktestProcessedPrice = null;
+            _pendingBacktestRollover = null;
         }
 
         internal void ClearBacktestQuoteIsolation()
         {
             _backtestPriceReady = false;
+            _lastQuoteProduct = string.Empty;
+            _lastQuoteYear = 0;
+            _lastQuoteMonth = 0;
+            _pendingBacktestRollover = null;
         }
 
         public void OnSecond(DateTime time)
@@ -646,6 +699,11 @@ namespace ZenPlatform.SessionManager
                 return;
             }
 
+            if (IsBacktestRolloverPending())
+            {
+                return;
+            }
+
             CompactActiveSessions();
             if (_activeSessions.Count == 0)
             {
@@ -668,7 +726,9 @@ namespace ZenPlatform.SessionManager
 
         private bool TryAutoRolloverAtSettlement(DateTime now, bool ignoreSchedule = false, bool manualTrigger = false)
         {
-            if (!IsStrategyRunning || IsBacktestActive)
+            var rolloverScheduleTime = IsBacktestActive ? BacktestRolloverScheduleTime : RuleSet.AutoRolloverTime;
+
+            if (!IsStrategyRunning)
             {
                 return false;
             }
@@ -683,7 +743,7 @@ namespace ZenPlatform.SessionManager
                 return false;
             }
 
-            if (!ignoreSchedule && now.TimeOfDay < RuleSet.AutoRolloverTime)
+            if (!ignoreSchedule && now.TimeOfDay < rolloverScheduleTime)
             {
                 return false;
             }
@@ -695,29 +755,74 @@ namespace ZenPlatform.SessionManager
                 return false;
             }
 
-            CompactActiveSessions();
-            var active = _activeSessions.Where(s => s.PositionManager.TotalKou != 0).ToList();
+            var active = CollectOpenPositionSessions();
             if (active.Count == 0)
             {
                 MarkAutoRolloverExecuted(now, ignoreSchedule);
                 return false;
             }
 
-            var contract = GetCurrentContract?.Invoke();
-            if (contract == null || string.IsNullOrWhiteSpace(contract.Value.Product) || contract.Value.Year <= 0 || contract.Value.Month <= 0)
+            string currentProduct;
+            int currentYear;
+            int currentMonth;
+            if (IsBacktestActive &&
+                !string.IsNullOrWhiteSpace(_lastQuoteProduct) &&
+                _lastQuoteYear > 0 &&
+                _lastQuoteMonth > 0)
             {
-                return false;
+                currentProduct = _lastQuoteProduct;
+                currentYear = _lastQuoteYear;
+                currentMonth = _lastQuoteMonth;
+            }
+            else
+            {
+                var contract = GetCurrentContract?.Invoke();
+                if (contract == null || string.IsNullOrWhiteSpace(contract.Value.Product) || contract.Value.Year <= 0 || contract.Value.Month <= 0)
+                {
+                    return false;
+                }
+
+                currentProduct = contract.Value.Product;
+                currentYear = contract.Value.Year;
+                currentMonth = contract.Value.Month;
             }
 
-            var currentProduct = contract.Value.Product;
-            var currentYear = contract.Value.Year;
-            var currentMonth = contract.Value.Month;
             var nextContract = new DateTime(currentYear, currentMonth, 1).AddMonths(1);
             var nextYear = nextContract.Year;
             var nextMonth = nextContract.Month;
 
             var netPosition = active.Sum(s => s.PositionManager.TotalKou);
             var timeout = TimeSpan.FromSeconds(10);
+
+            if (IsBacktestActive)
+            {
+                if (_pendingBacktestRollover != null)
+                {
+                    return false;
+                }
+
+                var backtestCloseFill = CurPrice ?? (netPosition > 0 ? (Bid ?? Ask) : (Ask ?? Bid)) ?? Bid ?? Ask;
+                if (!backtestCloseFill.HasValue)
+                {
+                    Log.Add("結算日自動換月失敗：無可用價格建立回測換月。", "結算日自動換月失敗：無可用價格建立回測換月。", ZenPlatform.LogText.LogTxtColor.黃色);
+                    MarkAutoRolloverExecuted(now, ignoreSchedule);
+                    return false;
+                }
+
+                _pendingBacktestRollover = new PendingBacktestRollover
+                {
+                    TriggerTime = now,
+                    Product = currentProduct,
+                    CurrentYear = currentYear,
+                    CurrentMonth = currentMonth,
+                    NextYear = nextYear,
+                    NextMonth = nextMonth,
+                    CloseFill = backtestCloseFill.Value
+                };
+
+                MarkAutoRolloverExecuted(now, ignoreSchedule);
+                return true;
+            }
 
             decimal? closeFill = null;
             decimal? openFill = null;
@@ -817,13 +922,60 @@ namespace ZenPlatform.SessionManager
 
             foreach (var session in active)
             {
-                session.ApplyRolloverSpread(spread);
+                session.ApplyRolloverSpread(spread, emitLog: true);
             }
 
             SwitchContract?.Invoke(currentProduct, nextYear, nextMonth);
             Log.Add($"結算日自動換月完成：{currentYear}/{currentMonth:00} -> {nextYear}/{nextMonth:00}，價差 {spread:0.##}");
             MarkAutoRolloverExecuted(now, ignoreSchedule);
             return true;
+        }
+
+        private bool TryCompleteBacktestPendingRollover(QuoteUpdate quote)
+        {
+            if (!IsBacktestActive || quote.Source != QuoteSource.Backtest || quote.Field != QuoteField.Last)
+            {
+                return false;
+            }
+
+            var pending = _pendingBacktestRollover;
+            if (pending == null)
+            {
+                return false;
+            }
+
+            var isAfterTriggerDayOpen = quote.Time.Date > pending.TriggerTime.Date ||
+                                       (quote.Time.Date == pending.TriggerTime.Date && quote.Time.TimeOfDay >= BacktestRolloverOpenTime);
+            if (!isAfterTriggerDayOpen)
+            {
+                return false;
+            }
+
+            if (quote.Year != pending.NextYear || quote.Month != pending.NextMonth)
+            {
+                return false;
+            }
+
+            if (!decimal.TryParse(quote.Value, out var openFill))
+            {
+                return false;
+            }
+
+            var spread = openFill - pending.CloseFill;
+            var targetSessions = CollectOpenPositionSessions();
+            foreach (var session in targetSessions)
+            {
+                session.ApplyRolloverSpread(spread, emitLog: true);
+            }
+            SwitchContract?.Invoke(pending.Product, pending.NextYear, pending.NextMonth);
+            Log.Add($"結算日自動換月完成：{pending.CurrentYear}/{pending.CurrentMonth:00} -> {pending.NextYear}/{pending.NextMonth:00}，價差 {spread:0.##}");
+            _pendingBacktestRollover = null;
+            return true;
+        }
+
+        private bool IsBacktestRolloverPending()
+        {
+            return IsBacktestActive && _pendingBacktestRollover != null;
         }
 
         private void MarkAutoRolloverExecuted(DateTime now, bool ignoreSchedule)
@@ -868,6 +1020,11 @@ namespace ZenPlatform.SessionManager
             }
 
             Entry.OnKBarCompleted(period, bar);
+
+            if (IsBacktestRolloverPending())
+            {
+                return;
+            }
 
             if (IsStrategyRunning && (!IsBacktestActive || !StrategyStartTime.HasValue || CurrentTime >= StrategyStartTime.Value))
             {
@@ -965,6 +1122,13 @@ namespace ZenPlatform.SessionManager
                     _activeSessions.RemoveAt(i);
                 }
             }
+        }
+
+        private List<Session> CollectOpenPositionSessions()
+        {
+            return Sessions
+                .Where(s => !s.IsFinished && s.PositionManager.TotalKou != 0)
+                .ToList();
         }
 
         private void DispatchSessionsOnTick(List<Session> snapshot)

@@ -35,8 +35,8 @@ namespace ZenPlatform.Core
         public bool IsDdeQuoteAvailable => DdePrice.IsQuoteAvailable;
 
         public string ProgramName => "台指二號";
-        // 安裝包版本號（例如 V2.0.3），供更新機制比較版本先後。
-        public string BuildSerial => "V2.0.3";
+        // 安裝包版本號（例如 v2.0.4），供更新機制比較版本先後。
+        public string BuildSerial => "v2.0.4";
         public string Version1 => BuildSerial;
         public string Version2 => "";
         public bool IsProgramStopped => ClientCtrl.IsProgramStopped;

@@ -8,13 +8,14 @@ namespace ZenPlatform
         public bool ModifyRequested { get; private set; }
         public bool ChangePasswordRequested { get; private set; }
 
-        public InfoWindow(string title, string header, string body, bool canChangePassword, bool canLogout)
+        public InfoWindow(string title, string header, string body, bool canChangePassword, bool hasBrokerPassword, bool canLogout)
         {
             InitializeComponent();
             Title = title;
             HeaderText.Text = header;
             BodyText.Text = body;
             ChangePasswordButton.IsEnabled = canChangePassword;
+            ChangePasswordButton.Content = hasBrokerPassword ? "更改密碼" : "設定密碼";
             LogoutButton.Visibility = canLogout ? Visibility.Visible : Visibility.Collapsed;
         }
 
@@ -45,9 +46,9 @@ namespace ZenPlatform
             Close();
         }
 
-        public static bool Show(Window owner, string title, string header, string body, bool canChangePassword, bool canLogout, out bool logoutRequested, out bool modifyRequested, out bool changePasswordRequested)
+        public static bool Show(Window owner, string title, string header, string body, bool canChangePassword, bool hasBrokerPassword, bool canLogout, out bool logoutRequested, out bool modifyRequested, out bool changePasswordRequested)
         {
-            var window = new InfoWindow(title, header, body, canChangePassword, canLogout)
+            var window = new InfoWindow(title, header, body, canChangePassword, hasBrokerPassword, canLogout)
             {
                 Owner = owner,
                 WindowStartupLocation = WindowStartupLocation.CenterOwner

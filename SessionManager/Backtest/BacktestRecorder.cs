@@ -131,9 +131,9 @@ namespace ZenPlatform.SessionManager.Backtest
             _upsertSessionCmd.Transaction = _tx;
             _upsertSessionCmd.CommandText =
                 @"INSERT INTO sessions(
-                    run_id, session_id, start_time_utc, end_time_utc, start_position, is_finished, realized_profit, trade_count, max_total_loss
+                    run_id, session_id, start_time_utc, end_time_utc, start_position, is_finished, realized_profit, trade_count, max_profit, max_total_loss
                   ) VALUES (
-                    $run_id, $session_id, $start_time_utc, $end_time_utc, $start_position, $is_finished, $realized_profit, $trade_count, $max_total_loss
+                    $run_id, $session_id, $start_time_utc, $end_time_utc, $start_position, $is_finished, $realized_profit, $trade_count, $max_profit, $max_total_loss
                   )
                   ON CONFLICT(run_id, session_id) DO UPDATE SET
                     start_time_utc = excluded.start_time_utc,
@@ -142,6 +142,7 @@ namespace ZenPlatform.SessionManager.Backtest
                     is_finished = excluded.is_finished,
                     realized_profit = excluded.realized_profit,
                     trade_count = excluded.trade_count,
+                    max_profit = excluded.max_profit,
                     max_total_loss = excluded.max_total_loss;";
             _upsertSessionCmd.Parameters.Add("$run_id", SqliteType.Text);
             _upsertSessionCmd.Parameters.Add("$session_id", SqliteType.Integer);
@@ -151,6 +152,7 @@ namespace ZenPlatform.SessionManager.Backtest
             _upsertSessionCmd.Parameters.Add("$is_finished", SqliteType.Integer);
             _upsertSessionCmd.Parameters.Add("$realized_profit", SqliteType.Real);
             _upsertSessionCmd.Parameters.Add("$trade_count", SqliteType.Integer);
+            _upsertSessionCmd.Parameters.Add("$max_profit", SqliteType.Real);
             _upsertSessionCmd.Parameters.Add("$max_total_loss", SqliteType.Real);
 
             _insertOrderMarkCmd = _connection.CreateCommand();
@@ -364,6 +366,7 @@ namespace ZenPlatform.SessionManager.Backtest
             bool isFinished,
             decimal realizedProfit,
             int tradeCount,
+            decimal maxProfit,
             decimal maxTotalLoss)
         {
             lock (_sync)
@@ -379,6 +382,7 @@ namespace ZenPlatform.SessionManager.Backtest
                 _upsertSessionCmd.Parameters["$is_finished"].Value = isFinished ? 1 : 0;
                 _upsertSessionCmd.Parameters["$realized_profit"].Value = (double)realizedProfit;
                 _upsertSessionCmd.Parameters["$trade_count"].Value = tradeCount;
+                _upsertSessionCmd.Parameters["$max_profit"].Value = (double)maxProfit;
                 _upsertSessionCmd.Parameters["$max_total_loss"].Value = (double)maxTotalLoss;
                 _upsertSessionCmd.ExecuteNonQuery();
             }
@@ -689,6 +693,7 @@ namespace ZenPlatform.SessionManager.Backtest
                     is_finished INTEGER NOT NULL,
                     realized_profit REAL NOT NULL,
                     trade_count INTEGER NOT NULL,
+                    max_profit REAL NOT NULL DEFAULT 0,
                     max_total_loss REAL NOT NULL DEFAULT 0,
                     FOREIGN KEY(run_id) REFERENCES runs(run_id)
                 );
@@ -784,6 +789,7 @@ namespace ZenPlatform.SessionManager.Backtest
             EnsureColumn(connection, "events", "seq", "INTEGER NOT NULL DEFAULT 0");
             EnsureColumn(connection, "order_marks", "seq", "INTEGER NOT NULL DEFAULT 0");
             EnsureColumn(connection, "logs", "seq", "INTEGER NOT NULL DEFAULT 0");
+            EnsureColumn(connection, "sessions", "max_profit", "REAL NOT NULL DEFAULT 0");
             EnsureColumn(connection, "sessions", "max_total_loss", "REAL NOT NULL DEFAULT 0");
         }
 

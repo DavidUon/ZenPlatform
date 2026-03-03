@@ -1,4 +1,5 @@
 using System;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace ZenPlatform.Core
@@ -28,6 +29,7 @@ namespace ZenPlatform.Core
 
         private readonly ZClient.ZClient _client;
         private readonly DdeService _ddeService;
+        private readonly SemaphoreSlim _networkSubscribeLock = new(1, 1);
         private PriceSource _priceSource = PriceSource.None;
         private PriceMode _mode = PriceMode.Auto;
         private string? _networkProduct;
@@ -41,11 +43,19 @@ namespace ZenPlatform.Core
         private DateTime? _pendingSinceUtc;
         private DateTime? _lastSourceChangedUtc;
 
+        private CancellationTokenSource? _networkRetryCts;
+        private string? _networkRetryProduct;
+        private int _networkRetryYear;
+        private int _networkRetryMonth;
+        private int _networkRetryAttempts;
+
         // Use a longer freshness window so low-liquidity sessions don't flap source state.
         // Health checks should maintain connectivity signal even when there are no trades.
         private static readonly TimeSpan TickStaleThreshold = TimeSpan.FromSeconds(65);
         private static readonly TimeSpan SwitchDebounce = TimeSpan.FromSeconds(3);
         private static readonly TimeSpan MinSourceHold = TimeSpan.FromSeconds(10);
+        private static readonly TimeSpan NetworkSubscribeRetryInterval = TimeSpan.FromMinutes(5);
+        private const int MaxNetworkSubscribeRetryAttempts = 10;
 
         public PriceManager(ZClient.ZClient client, DdeService ddeService)
         {
@@ -81,6 +91,7 @@ namespace ZenPlatform.Core
 
         public void ResetNetworkSubscription()
         {
+            CancelNetworkRetry();
             _networkProduct = null;
             _networkYear = 0;
             _networkMonth = 0;
@@ -93,6 +104,7 @@ namespace ZenPlatform.Core
             _pendingSource = null;
             _pendingSinceUtc = null;
             _lastSourceChangedUtc = null;
+            CancelNetworkRetry();
             return UnsubscribeNetworkAsync();
         }
 
@@ -203,6 +215,10 @@ namespace ZenPlatform.Core
             {
                 _ = UnsubscribeNetworkAsync();
             }
+            if (desiredSource != PriceSource.Network)
+            {
+                CancelNetworkRetry();
+            }
 
             _priceSource = desiredSource;
             _lastSourceChangedUtc = nowUtc;
@@ -215,6 +231,7 @@ namespace ZenPlatform.Core
         {
             if (!loggedIn)
             {
+                CancelNetworkRetry();
                 return;
             }
 
@@ -222,17 +239,168 @@ namespace ZenPlatform.Core
                 _networkYear == year &&
                 _networkMonth == month)
             {
+                CancelNetworkRetryIfDifferent(contract, year, month);
                 return;
             }
 
-            await UnsubscribeNetworkAsync().ConfigureAwait(false);
-            _networkProduct = contract;
-            _networkYear = year;
-            _networkMonth = month;
-            await _client.SubscribePrice(contract, year, month).ConfigureAwait(false);
+            if (IsRetryScheduledFor(contract, year, month))
+            {
+                return;
+            }
+
+            var success = await TrySubscribeNetworkAsync(contract, year, month).ConfigureAwait(false);
+            if (!success)
+            {
+                StartNetworkRetry(contract, year, month);
+            }
+        }
+
+        private async Task<bool> TrySubscribeNetworkAsync(string contract, int year, int month)
+        {
+            await _networkSubscribeLock.WaitAsync().ConfigureAwait(false);
+            try
+            {
+                if (!_client.IsLoggedIn)
+                {
+                    return false;
+                }
+
+                if (string.Equals(_networkProduct, contract, StringComparison.Ordinal) &&
+                    _networkYear == year &&
+                    _networkMonth == month)
+                {
+                    return true;
+                }
+
+                await UnsubscribeNetworkAsyncCore().ConfigureAwait(false);
+
+                var snapshot = await _client.SubscribePrice(contract, year, month).ConfigureAwait(false);
+                if (snapshot == null)
+                {
+                    return false;
+                }
+
+                _networkProduct = contract;
+                _networkYear = year;
+                _networkMonth = month;
+                return true;
+            }
+            finally
+            {
+                _networkSubscribeLock.Release();
+            }
+        }
+
+        private void StartNetworkRetry(string contract, int year, int month)
+        {
+            if (IsRetryScheduledFor(contract, year, month))
+            {
+                return;
+            }
+
+            CancelNetworkRetry();
+
+            var cts = new CancellationTokenSource();
+            _networkRetryCts = cts;
+            _networkRetryProduct = contract;
+            _networkRetryYear = year;
+            _networkRetryMonth = month;
+            _networkRetryAttempts = 0;
+            _ = Task.Run(() => RetrySubscribeLoopAsync(cts.Token));
+        }
+
+        private async Task RetrySubscribeLoopAsync(CancellationToken token)
+        {
+            while (!token.IsCancellationRequested)
+            {
+                if (_networkRetryAttempts >= MaxNetworkSubscribeRetryAttempts)
+                {
+                    CancelNetworkRetry();
+                    return;
+                }
+
+                try
+                {
+                    await Task.Delay(NetworkSubscribeRetryInterval, token).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException)
+                {
+                    return;
+                }
+
+                if (token.IsCancellationRequested)
+                {
+                    return;
+                }
+
+                var product = _networkRetryProduct;
+                var year = _networkRetryYear;
+                var month = _networkRetryMonth;
+                if (string.IsNullOrWhiteSpace(product))
+                {
+                    return;
+                }
+
+                _networkRetryAttempts++;
+
+                var success = await TrySubscribeNetworkAsync(product, year, month).ConfigureAwait(false);
+                if (success)
+                {
+                    CancelNetworkRetry();
+                    return;
+                }
+            }
+        }
+
+        private bool IsRetryScheduledFor(string contract, int year, int month)
+        {
+            var cts = _networkRetryCts;
+            return cts != null &&
+                !cts.IsCancellationRequested &&
+                string.Equals(_networkRetryProduct, contract, StringComparison.Ordinal) &&
+                _networkRetryYear == year &&
+                _networkRetryMonth == month;
+        }
+
+        private void CancelNetworkRetryIfDifferent(string contract, int year, int month)
+        {
+            if (_networkRetryCts == null || _networkRetryCts.IsCancellationRequested)
+            {
+                return;
+            }
+
+            if (!string.Equals(_networkRetryProduct, contract, StringComparison.Ordinal) ||
+                _networkRetryYear != year ||
+                _networkRetryMonth != month)
+            {
+                CancelNetworkRetry();
+            }
+        }
+
+        private void CancelNetworkRetry()
+        {
+            _networkRetryCts?.Cancel();
+            _networkRetryCts = null;
+            _networkRetryProduct = null;
+            _networkRetryYear = 0;
+            _networkRetryMonth = 0;
+            _networkRetryAttempts = 0;
         }
 
         private async Task UnsubscribeNetworkAsync()
+        {
+            await _networkSubscribeLock.WaitAsync().ConfigureAwait(false);
+            try
+            {
+                await UnsubscribeNetworkAsyncCore().ConfigureAwait(false);
+            }
+            finally
+            {
+                _networkSubscribeLock.Release();
+            }
+        }
+
+        private async Task UnsubscribeNetworkAsyncCore()
         {
             if (string.IsNullOrWhiteSpace(_networkProduct))
             {

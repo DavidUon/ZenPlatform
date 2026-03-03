@@ -1370,7 +1370,9 @@ namespace ZenPlatform.MVVM.UserControls
                 ruleSet.MaxSessionCount,
                 ruleSet.ReverseAfterStopLoss,
                 ruleSet.CoverLossBeforeTakeProfit,
+                ruleSet.CoverLossMaxProfitCapEnabled,
                 ruleSet.CoverLossTriggerPoints,
+                ruleSet.CoverLossMaxProfitPoints,
                 ruleSet.ExitOnTotalProfitRise,
                 ruleSet.ExitOnTotalProfitRiseArmBelowPoints,
                 ruleSet.ExitOnTotalProfitRisePoints,
@@ -1388,6 +1390,7 @@ namespace ZenPlatform.MVVM.UserControls
                 ruleSet.NightCloseBeforeTime,
                 ruleSet.CloseBeforeLongHoliday,
                 ruleSet.CloseBeforeLongHolidayTime,
+                ruleSet.CloseBeforeLongHolidayExcludeWeekends,
                 PreloadDays = preloadDays,
                 Start = start,
                 End = end
@@ -1513,6 +1516,7 @@ namespace ZenPlatform.MVVM.UserControls
                     session.IsFinished,
                     session.RealizedProfit,
                     session.TradeCount,
+                    session.MaxProfit,
                     session.MaxTotalLoss);
             }
         }

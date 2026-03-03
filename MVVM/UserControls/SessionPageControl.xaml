@@ -285,12 +285,13 @@
                             </Style>
                         </DataGridTextColumn.ElementStyle>
                     </DataGridTextColumn>
-                    <DataGridTextColumn Header="任務損益" Binding="{Binding TotalProfit, StringFormat={}{0:F0}}" Width="96.6">
+                    <DataGridTextColumn Header="任務總損益" Binding="{Binding TotalProfit, StringFormat={}{0:F0}}" Width="96.6">
                         <DataGridTextColumn.ElementStyle>
                             <Style TargetType="{x:Type TextBlock}" BasedOn="{StaticResource {x:Type TextBlock}}">
                                 <Setter Property="HorizontalAlignment" Value="Center" />
                                 <Setter Property="VerticalAlignment" Value="Center" />
                                 <Setter Property="TextAlignment" Value="Center" />
+                                <Setter Property="Foreground" Value="#FFFFD54F" />
                             </Style>
                         </DataGridTextColumn.ElementStyle>
                     </DataGridTextColumn>
@@ -317,7 +318,16 @@
                             </Style>
                         </DataGridTextColumn.ElementStyle>
                     </DataGridTextColumn>
-                    <DataGridTextColumn Header="最大總損失" Binding="{Binding MaxTotalLoss, StringFormat={}{0:F0}}" Width="96.6">
+                    <DataGridTextColumn Header="最大獲利" Binding="{Binding MaxProfit, StringFormat={}{0:F0}}" Width="96.6">
+                        <DataGridTextColumn.ElementStyle>
+                            <Style TargetType="{x:Type TextBlock}" BasedOn="{StaticResource {x:Type TextBlock}}">
+                                <Setter Property="HorizontalAlignment" Value="Center" />
+                                <Setter Property="VerticalAlignment" Value="Center" />
+                                <Setter Property="TextAlignment" Value="Center" />
+                            </Style>
+                        </DataGridTextColumn.ElementStyle>
+                    </DataGridTextColumn>
+                    <DataGridTextColumn Header="最大損失" Binding="{Binding MaxTotalLoss, StringFormat={}{0:F0}}" Width="96.6">
                         <DataGridTextColumn.ElementStyle>
                             <Style TargetType="{x:Type TextBlock}" BasedOn="{StaticResource {x:Type TextBlock}}">
                                 <Setter Property="HorizontalAlignment" Value="Center" />

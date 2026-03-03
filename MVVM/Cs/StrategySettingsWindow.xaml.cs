@@ -63,7 +63,9 @@ namespace ZenPlatform
             TakeProfitFixedRadio.IsChecked = _ruleSet.TakeProfitPoints > 0;
             TakeProfitAutoRadio.IsChecked = _ruleSet.AutoTakeProfitPoints > 0;
             CoverLossBeforeTakeProfitCheckBox.IsChecked = _ruleSet.CoverLossBeforeTakeProfit;
+            CoverLossMaxProfitCapEnabledCheckBox.IsChecked = _ruleSet.CoverLossMaxProfitCapEnabled;
             CoverLossTriggerPointsBox.Text = _ruleSet.CoverLossTriggerPoints.ToString();
+            CoverLossMaxProfitPointsBox.Text = _ruleSet.CoverLossMaxProfitPoints.ToString();
             ExitOnTotalProfitRiseCheckBox.IsChecked = _ruleSet.ExitOnTotalProfitRise;
             ExitOnTotalProfitRiseArmBelowPointsBox.Text = (_ruleSet.ExitOnTotalProfitRiseArmBelowPoints > 0 ? _ruleSet.ExitOnTotalProfitRiseArmBelowPoints : DefaultTotalProfitRiseArmBelowPoints).ToString();
             ExitOnTotalProfitRisePointsBox.Text = _ruleSet.ExitOnTotalProfitRisePoints.ToString();
@@ -103,6 +105,7 @@ namespace ZenPlatform
             NightCloseBeforeTimeBox.Text = _ruleSet.NightCloseBeforeTime.ToString(@"hh\:mm");
             CloseBeforeLongHolidayCheckBox.IsChecked = _ruleSet.CloseBeforeLongHoliday;
             CloseBeforeLongHolidayTimeBox.Text = _ruleSet.CloseBeforeLongHolidayTime.ToString(@"hh\:mm");
+            CloseBeforeLongHolidayExcludeWeekendsCheckBox.IsChecked = _ruleSet.CloseBeforeLongHolidayExcludeWeekends;
             UpdateTrendOptionVisibility();
             UpdateTakeProfitOptionVisibility();
             UpdateAutoRolloverOptionVisibility();
@@ -165,6 +168,12 @@ namespace ZenPlatform
                 return;
             }
 
+            if (!TryReadInt(CoverLossMaxProfitPointsBox, 0, 100000, out var coverLossMaxProfitPoints))
+            {
+                MessageBoxWindow.Show(this, "浮動停利點數需為非負整數。", "策略設定");
+                return;
+            }
+
             if (!TryReadInt(ExitOnTotalProfitRiseArmBelowPointsBox, 0, 100000, out var exitOnTotalProfitRiseArmBelowPoints))
             {
                 MessageBoxWindow.Show(this, "任務總損益低於點數需為非負整數。", "策略設定");
@@ -173,7 +182,7 @@ namespace ZenPlatform
 
             if (!TryReadInt(ExitOnTotalProfitRisePointsBox, 0, 100000, out var exitOnTotalProfitRisePoints))
             {
-                MessageBoxWindow.Show(this, "任務總損益拉回點數需為非負整數。", "策略設定");
+                MessageBoxWindow.Show(this, "浮動損益點數需為非負整數。", "策略設定");
                 return;
             }
 
@@ -208,15 +217,23 @@ namespace ZenPlatform
                 return;
             }
 
+            if (CoverLossBeforeTakeProfitCheckBox.IsChecked == true &&
+                CoverLossMaxProfitCapEnabledCheckBox.IsChecked == true &&
+                coverLossMaxProfitPoints <= 0)
+            {
+                MessageBoxWindow.Show(this, "啟用浮動停利時，點數需大於 0。", "策略設定");
+                return;
+            }
+
             if (ExitOnTotalProfitRiseCheckBox.IsChecked == true && exitOnTotalProfitRisePoints <= 0)
             {
-                MessageBoxWindow.Show(this, "啟用任務總損益低於後拉回平倉時，拉回點數需大於 0。", "策略設定");
+                MessageBoxWindow.Show(this, "啟用任務總損益低於後浮動損益平倉時，浮動損益點數需大於 0。", "策略設定");
                 return;
             }
 
             if (ExitOnTotalProfitRiseCheckBox.IsChecked == true && exitOnTotalProfitRiseArmBelowPoints <= 0)
             {
-                MessageBoxWindow.Show(this, "啟用任務總損益低於後拉回平倉時，低於點數需大於 0。", "策略設定");
+                MessageBoxWindow.Show(this, "啟用任務總損益低於後浮動損益平倉時，低於點數需大於 0。", "策略設定");
                 return;
             }
 
@@ -225,19 +242,13 @@ namespace ZenPlatform
             {
                 if (exitOnTotalProfitDropTriggerPoints <= 0)
                 {
-                    MessageBoxWindow.Show(this, "啟用任務總損益超過後低於平倉時，超過點數需大於 0。", "策略設定");
+                    MessageBoxWindow.Show(this, "啟用任務總損益超過後回落平倉時，超過點數需大於 0。", "策略設定");
                     return;
                 }
 
                 if (exitOnTotalProfitDropExitPoints < 0)
                 {
-                    MessageBoxWindow.Show(this, "啟用任務總損益超過後低於平倉時，低於點數需為非負整數。", "策略設定");
-                    return;
-                }
-
-                if (exitOnTotalProfitDropExitPoints >= exitOnTotalProfitDropTriggerPoints)
-                {
-                    MessageBoxWindow.Show(this, "啟用任務總損益超過後低於平倉時，低於點數需小於超過點數。", "策略設定");
+                    MessageBoxWindow.Show(this, "啟用任務總損益超過後回落平倉時，回落點數需為非負整數。", "策略設定");
                     return;
                 }
             }
@@ -458,7 +469,9 @@ namespace ZenPlatform
             _ruleSet.TakeProfitMode = takeProfitMode;
             _ruleSet.AutoTakeProfitPoints = floatTakeProfitEnabled ? autoTakeProfit : 0;
             _ruleSet.CoverLossBeforeTakeProfit = CoverLossBeforeTakeProfitCheckBox.IsChecked == true;
+            _ruleSet.CoverLossMaxProfitCapEnabled = CoverLossMaxProfitCapEnabledCheckBox.IsChecked == true;
             _ruleSet.CoverLossTriggerPoints = coverLossTriggerPoints;
+            _ruleSet.CoverLossMaxProfitPoints = coverLossMaxProfitPoints;
             _ruleSet.ExitOnTotalProfitRise = ExitOnTotalProfitRiseCheckBox.IsChecked == true;
             _ruleSet.ExitOnTotalProfitRiseArmBelowPoints = exitOnTotalProfitRiseArmBelowPoints;
             _ruleSet.ExitOnTotalProfitRisePoints = exitOnTotalProfitRisePoints;
@@ -495,6 +508,7 @@ namespace ZenPlatform
             _ruleSet.NightCloseBeforeTime = nightCloseBeforeTime;
             _ruleSet.CloseBeforeLongHoliday = closeBeforeLongHoliday;
             _ruleSet.CloseBeforeLongHolidayTime = closeBeforeLongHolidayTime;
+            _ruleSet.CloseBeforeLongHolidayExcludeWeekends = CloseBeforeLongHolidayExcludeWeekendsCheckBox.IsChecked == true;
 
             DialogResult = true;
         }
@@ -585,6 +599,11 @@ namespace ZenPlatform
             var coverLossEnabled = CoverLossBeforeTakeProfitCheckBox.IsChecked == true;
             CoverLossTriggerPointsBox.IsEnabled = coverLossEnabled;
             CoverLossTriggerPointsBox.Opacity = coverLossEnabled ? 1.0 : 0.6;
+            CoverLossMaxProfitCapEnabledCheckBox.IsEnabled = coverLossEnabled;
+            CoverLossMaxProfitCapEnabledCheckBox.Opacity = coverLossEnabled ? 1.0 : 0.6;
+            var coverLossCapEnabled = coverLossEnabled && CoverLossMaxProfitCapEnabledCheckBox.IsChecked == true;
+            CoverLossMaxProfitPointsBox.IsEnabled = coverLossCapEnabled;
+            CoverLossMaxProfitPointsBox.Opacity = coverLossCapEnabled ? 1.0 : 0.6;
 
             var riseEnabled = ExitOnTotalProfitRiseCheckBox.IsChecked == true;
             ExitOnTotalProfitRiseArmBelowPointsBox.IsEnabled = riseEnabled;
@@ -622,6 +641,8 @@ namespace ZenPlatform
             var enabled = CloseBeforeLongHolidayCheckBox.IsChecked == true;
             CloseBeforeLongHolidayTimeBox.IsEnabled = enabled;
             CloseBeforeLongHolidayTimeBox.Opacity = enabled ? 1.0 : 0.6;
+            CloseBeforeLongHolidayExcludeWeekendsCheckBox.IsEnabled = enabled;
+            CloseBeforeLongHolidayExcludeWeekendsCheckBox.Opacity = enabled ? 1.0 : 0.6;
         }
 
         private void OnCancelClick(object sender, RoutedEventArgs e)
